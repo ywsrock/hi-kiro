@@ -14,20 +14,56 @@ use crate::types::*;
 
 /// Load a full Session by ID (searches JSONL then SQLite sources).
 fn load_session_by_id(state: &AppState, session_id: &str) -> Option<Session> {
-    // Try JSONL first
     let sessions_dir = state.sessions_dir.clone();
-    let jsonl_sessions = jsonl::parse_all(&sessions_dir);
-    if let Some(s) = jsonl_sessions.into_iter().find(|s| s.id == session_id) {
-        return Some(s);
-    }
-    // Try SQLite
     let sqlite_path = state.sqlite_db_path.clone();
-    if sqlite_path.exists() {
-        let sqlite_sessions = sqlite_source::parse_all(&sqlite_path);
-        if let Some(s) = sqlite_sessions.into_iter().find(|s| s.id == session_id) {
+
+    // Try JSONL: load directly by UUID (no full scan needed)
+    let json_path = sessions_dir.join(format!("{}.json", session_id));
+    let jsonl_path = sessions_dir.join(format!("{}.jsonl", session_id));
+    if json_path.exists() && jsonl_path.exists() {
+        if let Ok(messages) = jsonl::parse_jsonl_messages(&jsonl_path) {
+            // Read metadata
+            if let Ok(meta_str) = std::fs::read_to_string(&json_path) {
+                if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&meta_str) {
+                    let title = meta["title"].as_str().unwrap_or("Untitled").to_string();
+                    let cwd = meta["cwd"].as_str().unwrap_or("").to_string();
+                    let created_at = jsonl::parse_rfc3339_to_ms(meta["created_at"].as_str().unwrap_or(""));
+                    let updated_at = jsonl::parse_rfc3339_to_ms(meta["updated_at"].as_str().unwrap_or(""));
+                    return Some(crate::models::Session {
+                        id: session_id.to_string(),
+                        title,
+                        cwd,
+                        created_at,
+                        updated_at,
+                        messages,
+                        model_name: None,
+                        max_context_pct: None,
+                        total_tool_uses: 0,
+                        total_cycles: 0,
+                        total_duration_secs: 0,
+                        source: crate::models::SessionSource::Jsonl,
+                    });
+                }
+            }
+        }
+    }
+
+    // Try JSONL subdirectory (tasks/) format
+    let tasks_dir = sessions_dir.join(session_id).join("tasks");
+    if tasks_dir.exists() {
+        let all = jsonl::parse_all(&sessions_dir);
+        if let Some(s) = all.into_iter().find(|s| s.id == session_id) {
             return Some(s);
         }
     }
+
+    // Try SQLite: use targeted load (no full scan)
+    if sqlite_path.exists() {
+        if let Some(s) = sqlite_source::load_full_session(&sqlite_path, session_id) {
+            return Some(s);
+        }
+    }
+
     None
 }
 
