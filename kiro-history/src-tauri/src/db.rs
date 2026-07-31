@@ -65,7 +65,7 @@ pub fn search_sessions(
          LEFT JOIN user_data u ON m.session_id = u.session_id
          {where_clause}
          ORDER BY m.updated_at DESC
-         LIMIT {limit}"
+         LIMIT {limit}",
     );
 
     let mut stmt = conn.prepare(&sql)?;

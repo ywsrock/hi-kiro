@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "../../context/AppContext";
 import { SearchBar } from "../search/SearchBar";
@@ -27,21 +27,22 @@ export function SearchView() {
   const [filters, setFilters] = useState<FilterParams>({});
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
+
+  // Derive available models from sessions (no extra state)
+  const availableModels = useMemo(
+    () => [...new Set(sessions.map((s) => s.model_name).filter(Boolean) as string[])],
+    [sessions]
+  );
   const [deleteTargets, setDeleteTargets] = useState<SessionSummary[]>([]);
 
-  const debouncedQuery = useDebounce(query, 200);
+  const debouncedQuery = useDebounce(query, 150);
 
   const loadSessions = useCallback(async () => {
     try {
       const results = await api.searchSessions(debouncedQuery, 500, filters);
       setSessions(results);
       setLoading(false);
-
-      // Extract unique models for filter
-      const models = [...new Set(results.map((s) => s.model_name).filter(Boolean) as string[])];
-      setAvailableModels(models);
     } catch (e) {
       console.error("Search failed:", e);
       setLoading(false);

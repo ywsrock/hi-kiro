@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useState, memo, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Star, Copy, Check, Trash2 } from "lucide-react";
 import { useToast } from "../ui/Toast";

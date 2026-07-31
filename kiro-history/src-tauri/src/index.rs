@@ -63,6 +63,16 @@ fn init_schema(conn: &Connection) -> Result<()> {
             session_id TEXT PRIMARY KEY,
             deleted_at INTEGER NOT NULL
         );
+
+        -- Performance indexes for common query patterns
+        CREATE INDEX IF NOT EXISTS idx_sessions_updated_at
+            ON sessions_meta(updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_sessions_cwd
+            ON sessions_meta(cwd);
+        CREATE INDEX IF NOT EXISTS idx_sessions_model
+            ON sessions_meta(model_name);
+        CREATE INDEX IF NOT EXISTS idx_user_data_starred
+            ON user_data(starred) WHERE starred = 1;
     ")?;
     Ok(())
 }

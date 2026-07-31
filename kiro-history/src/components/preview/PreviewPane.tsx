@@ -3,6 +3,34 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css";
+import hljs from "highlight.js/lib/core";
+import typescript from "highlight.js/lib/languages/typescript";
+import javascript from "highlight.js/lib/languages/javascript";
+import python from "highlight.js/lib/languages/python";
+import rust from "highlight.js/lib/languages/rust";
+import bash from "highlight.js/lib/languages/bash";
+import sql from "highlight.js/lib/languages/sql";
+import json from "highlight.js/lib/languages/json";
+import yaml from "highlight.js/lib/languages/yaml";
+import css from "highlight.js/lib/languages/css";
+import xml from "highlight.js/lib/languages/xml";
+import go from "highlight.js/lib/languages/go";
+import java from "highlight.js/lib/languages/java";
+// Register only needed languages (reduces bundle ~300KB)
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("python", python);
+hljs.registerLanguage("rust", rust);
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("shell", bash);
+hljs.registerLanguage("sql", sql);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("yaml", yaml);
+hljs.registerLanguage("css", css);
+hljs.registerLanguage("html", xml);
+hljs.registerLanguage("xml", xml);
+hljs.registerLanguage("go", go);
+hljs.registerLanguage("java", java);
 import { Copy, Check, RotateCcw, Download, ChevronDown, ChevronRight, Tag, X, Pencil } from "lucide-react";
 import { useToast } from "../ui/Toast";
 import type { SessionDetail, SessionSummary } from "../../types";
@@ -185,7 +213,7 @@ function MessageBubble({ role, content }: { role: "User" | "Kiro"; content: stri
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeHighlight]}
+              rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
               components={{
                 pre: ({ children, ...props }) => {
                   const codeEl = (children as React.ReactElement)?.props;
