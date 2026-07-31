@@ -1,0 +1,131 @@
+use serde::{Deserialize, Serialize};
+
+// ── Search / Filter ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct FilterParams {
+    pub date_from: Option<i64>,
+    pub date_to: Option<i64>,
+    pub model_name: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub starred_only: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SessionSummary {
+    pub session_id: String,
+    pub title: String,
+    pub cwd: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub message_count: i64,
+    pub source: String,
+    pub model_name: Option<String>,
+    pub max_context_pct: Option<f32>,
+    pub total_tool_uses: i64,
+    pub total_cycles: i64,
+    pub total_duration_secs: i64,
+    pub starred: bool,
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SessionDetail {
+    pub summary: SessionSummary,
+    pub messages: Vec<MessageDto>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MessageDto {
+    pub role: String,
+    pub content: String,
+    pub timestamp: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IndexStats {
+    pub session_count: i64,
+    pub last_indexed_at: i64,
+}
+
+// ── Tags ─────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TagStat {
+    pub tag: String,
+    pub count: i64,
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ModelCount {
+    pub model_name: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CwdCount {
+    pub cwd: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DateCount {
+    pub date: String, // "YYYY-MM-DD"
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatsData {
+    pub total_sessions: i64,
+    pub total_messages: i64,
+    pub sessions_by_model: Vec<ModelCount>,
+    pub sessions_by_cwd: Vec<CwdCount>,
+    pub sessions_by_date: Vec<DateCount>,
+    pub avg_context_pct: f32,
+    pub most_used_tags: Vec<TagStat>,
+}
+
+// ── Snippets ──────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodeSnippet {
+    pub language: String,
+    pub code: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodeSnippetWithSession {
+    pub session_id: String,
+    pub session_title: String,
+    pub language: String,
+    pub code: String,
+}
+
+// ── File refs ─────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileRef {
+    pub path: String,
+    pub exists: bool,
+}
+
+// ── Diff ──────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiffResult {
+    pub session_id_a: String,
+    pub session_id_b: String,
+    pub diff: String,
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    Markdown,
+    Html,
+    Pdf,
+}
