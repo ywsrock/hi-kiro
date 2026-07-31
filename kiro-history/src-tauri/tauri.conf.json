@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "kiro-history",
+  "productName": "hi-kiro",
   "version": "0.1.0",
-  "identifier": "dev.kiro.history",
+  "identifier": "dev.hikiro.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "kiro-history",
+        "title": "hi-kiro",
         "width": 1280,
         "height": 900,
         "minWidth": 800,

@@ -1,12 +1,12 @@
 [package]
-name = "kiro-history"
+name = "hi-kiro"
 version = "0.1.0"
 description = "kiro-cli session history viewer"
 authors = []
 edition = "2021"
 
 [lib]
-name = "kiro_history_lib"
+name = "hi_kiro_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

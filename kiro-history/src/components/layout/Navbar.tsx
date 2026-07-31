@@ -31,7 +31,7 @@ export function Navbar() {
           className="text-sm font-semibold tracking-wider"
           style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}
         >
-          kiro-history
+          hi-kiro
         </span>
 
         <div className="flex items-center gap-2">

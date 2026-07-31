@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    kiro_history_lib::run()
+    hi_kiro_lib::run()
 }

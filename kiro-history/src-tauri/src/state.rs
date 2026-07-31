@@ -64,7 +64,7 @@ pub fn resolve_paths(config: &AppConfig) -> (PathBuf, PathBuf, PathBuf) {
         .map(PathBuf::from)
         .unwrap_or_else(|| data.join("kiro-cli/data.sqlite3"));
 
-    let index_db = data.join("kiro-history/index.db");
+    let index_db = data.join("hi-kiro/index.db");
 
     (sessions_dir, sqlite_db, index_db)
 }
@@ -73,7 +73,7 @@ pub fn resolve_paths(config: &AppConfig) -> (PathBuf, PathBuf, PathBuf) {
 pub fn load_config() -> AppConfig {
     let config_path = dirs::data_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from("/")))
-        .join("kiro-history/config.json");
+        .join("hi-kiro/config.json");
 
     if config_path.exists() {
         if let Ok(s) = std::fs::read_to_string(&config_path) {
@@ -89,7 +89,7 @@ pub fn load_config() -> AppConfig {
 pub fn save_config(config: &AppConfig) -> anyhow::Result<()> {
     let config_path = dirs::data_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from("/")))
-        .join("kiro-history/config.json");
+        .join("hi-kiro/config.json");
 
     if let Some(parent) = config_path.parent() {
         std::fs::create_dir_all(parent)?;
