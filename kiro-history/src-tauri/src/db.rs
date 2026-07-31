@@ -283,72 +283,144 @@ pub fn restore_session(conn: &Connection, session_id: &str) -> Result<()> {
 }
 
 pub fn get_stats(conn: &Connection) -> Result<StatsData> {
+    // ── Core ──────────────────────────────────────────────────────────────────
     let total_sessions: i64 = conn
         .query_row("SELECT COUNT(*) FROM sessions_meta", [], |r| r.get(0))?;
 
     let total_messages: i64 = conn
-        .query_row("SELECT SUM(message_count) FROM sessions_meta", [], |r| {
-            r.get(0)
-        })
+        .query_row("SELECT COALESCE(SUM(message_count),0) FROM sessions_meta", [], |r| r.get(0))
         .unwrap_or(0);
 
-    // By model
+    // Sessions by model (with duration)
     let mut stmt = conn.prepare(
-        "SELECT COALESCE(model_name, 'unknown') as mn, COUNT(*) as cnt
+        "SELECT COALESCE(model_name,'unknown') as mn, COUNT(*) as cnt,
+                COALESCE(SUM(total_duration_secs),0) as dur
          FROM sessions_meta GROUP BY mn ORDER BY cnt DESC",
     )?;
-    let sessions_by_model: Vec<ModelCount> = stmt
-        .query_map([], |r| {
-            Ok(ModelCount {
-                model_name: r.get(0)?,
-                count: r.get(1)?,
-            })
-        })?
-        .flatten()
-        .collect();
+    let sessions_by_model_raw: Vec<(String, i64, i64)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .flatten().collect();
 
-    // By cwd (top 10)
+    // Build cost breakdown per model
+    let cost_breakdown: Vec<crate::types::CostBreakdown> = sessions_by_model_raw.iter().map(|(model, _cnt, dur)| {
+        let (input_price, output_price, context_window) = model_pricing(model);
+        // Estimate: avg context 15%, 70% input / 30% output split
+        let avg_ctx_pct = 0.15f64;
+        let est_total_tokens = (avg_ctx_pct * context_window as f64) as i64 * _cnt;
+        let est_input = (est_total_tokens as f64 * 0.7) as i64;
+        let est_output = (est_total_tokens as f64 * 0.3) as i64;
+        let cost = (est_input as f64 / 1_000_000.0) * input_price
+                 + (est_output as f64 / 1_000_000.0) * output_price;
+        crate::types::CostBreakdown {
+            model_name: model.clone(),
+            est_input_tokens: est_input,
+            est_output_tokens: est_output,
+            est_cost_usd: (cost * 100.0).round() / 100.0,
+        }
+    }).collect();
+
+    let total_est_cost_usd = cost_breakdown.iter().map(|c| c.est_cost_usd).sum::<f64>();
+    let est_tokens_total = cost_breakdown.iter().map(|c| c.est_input_tokens + c.est_output_tokens).sum::<i64>();
+
+    let sessions_by_model: Vec<crate::types::ModelCount> = sessions_by_model_raw.iter()
+        .zip(cost_breakdown.iter())
+        .map(|((mn, cnt, dur), cb)| crate::types::ModelCount {
+            model_name: mn.clone(),
+            count: *cnt,
+            est_cost_usd: cb.est_cost_usd,
+            total_duration_secs: *dur,
+        }).collect();
+
+    // Sessions by cwd (top 10, with extra stats)
     let mut stmt = conn.prepare(
-        "SELECT cwd, COUNT(*) as cnt FROM sessions_meta
-         GROUP BY cwd ORDER BY cnt DESC LIMIT 10",
+        "SELECT cwd, COUNT(*) as cnt,
+                COALESCE(SUM(message_count),0) as msgs,
+                COALESCE(SUM(total_duration_secs),0) as dur,
+                COALESCE(SUM(total_tool_uses),0) as tools
+         FROM sessions_meta GROUP BY cwd ORDER BY cnt DESC LIMIT 10",
     )?;
-    let sessions_by_cwd: Vec<CwdCount> = stmt
-        .query_map([], |r| {
-            Ok(CwdCount {
-                cwd: r.get(0)?,
-                count: r.get(1)?,
-            })
-        })?
-        .flatten()
-        .collect();
+    let sessions_by_cwd: Vec<crate::types::CwdCount> = stmt
+        .query_map([], |r| Ok(crate::types::CwdCount {
+            cwd: r.get(0)?,
+            count: r.get(1)?,
+            total_messages: r.get(2)?,
+            total_duration_secs: r.get(3)?,
+            total_tool_uses: r.get(4)?,
+        }))?
+        .flatten().collect();
 
-    // By date (daily, last 365 days)
+    // Sessions by date (daily, last 365 days)
     let mut stmt = conn.prepare(
         "SELECT strftime('%Y-%m-%d', datetime(updated_at/1000, 'unixepoch')) as d,
                 COUNT(*) as cnt
-         FROM sessions_meta
-         WHERE updated_at > (strftime('%s','now') - 365*86400) * 1000
+         FROM sessions_meta WHERE updated_at > (strftime('%s','now') - 365*86400) * 1000
          GROUP BY d ORDER BY d",
     )?;
-    let sessions_by_date: Vec<DateCount> = stmt
-        .query_map([], |r| {
-            Ok(DateCount {
-                date: r.get(0)?,
-                count: r.get(1)?,
-            })
-        })?
-        .flatten()
-        .collect();
+    let sessions_by_date: Vec<crate::types::DateCount> = stmt
+        .query_map([], |r| Ok(crate::types::DateCount { date: r.get(0)?, count: r.get(1)? }))?
+        .flatten().collect();
 
+    // By hour (local time via unixepoch)
+    let mut stmt = conn.prepare(
+        "SELECT CAST(strftime('%H', datetime(updated_at/1000, 'unixepoch')) AS INTEGER) as h,
+                COUNT(*) as cnt
+         FROM sessions_meta WHERE updated_at > 0
+         GROUP BY h ORDER BY h",
+    )?;
+    let by_hour: Vec<crate::types::HourCount> = stmt
+        .query_map([], |r| Ok(crate::types::HourCount { hour: r.get::<_,u8>(0)?, count: r.get(1)? }))?
+        .flatten().collect();
+
+    let peak_hour = by_hour.iter().max_by_key(|h| h.count).map(|h| h.hour).unwrap_or(0);
+
+    // By weekday (0=Sun in strftime)
+    let mut stmt = conn.prepare(
+        "SELECT CAST(strftime('%w', datetime(updated_at/1000, 'unixepoch')) AS INTEGER) as wd,
+                COUNT(*) as cnt
+         FROM sessions_meta WHERE updated_at > 0
+         GROUP BY wd ORDER BY wd",
+    )?;
+    let by_weekday: Vec<crate::types::WeekdayCount> = stmt
+        .query_map([], |r| Ok(crate::types::WeekdayCount { weekday: r.get::<_,u8>(0)?, count: r.get(1)? }))?
+        .flatten().collect();
+
+    // ── Productivity ──────────────────────────────────────────────────────────
+    let (total_duration_secs, avg_duration_secs, longest_session_duration): (i64, f64, i64) = conn
+        .query_row(
+            "SELECT COALESCE(SUM(total_duration_secs),0), COALESCE(AVG(total_duration_secs),0), COALESCE(MAX(total_duration_secs),0) FROM sessions_meta",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
+
+    let avg_messages_per_session = if total_sessions > 0 {
+        total_messages as f64 / total_sessions as f64
+    } else { 0.0 };
+
+    // ── AI Usage ──────────────────────────────────────────────────────────────
+    let (total_tool_uses, total_cycles): (i64, i64) = conn
+        .query_row(
+            "SELECT COALESCE(SUM(total_tool_uses),0), COALESCE(SUM(total_cycles),0) FROM sessions_meta",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+
+    let avg_tool_uses_per_session = if total_sessions > 0 {
+        total_tool_uses as f64 / total_sessions as f64
+    } else { 0.0 };
+
+    let agent_sessions: i64 = conn
+        .query_row("SELECT COUNT(*) FROM sessions_meta WHERE total_cycles > 0", [], |r| r.get(0))
+        .unwrap_or(0);
+    let agent_session_ratio = if total_sessions > 0 {
+        agent_sessions as f64 / total_sessions as f64
+    } else { 0.0 };
+
+    // ── Context & Tags ────────────────────────────────────────────────────────
     let avg_context_pct: f32 = conn
         .query_row(
             "SELECT AVG(max_context_pct) FROM sessions_meta WHERE max_context_pct IS NOT NULL",
-            [],
-            |r| r.get::<_, Option<f64>>(0),
-        )
-        .ok()
-        .flatten()
-        .unwrap_or(0.0) as f32;
+            [], |r| r.get::<_, Option<f64>>(0),
+        ).ok().flatten().unwrap_or(0.0) as f32;
 
     let most_used_tags = get_all_tags(conn).unwrap_or_default();
 
@@ -360,5 +432,33 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
         sessions_by_date,
         avg_context_pct,
         most_used_tags,
+        total_duration_secs,
+        avg_duration_secs,
+        longest_session_duration,
+        avg_messages_per_session,
+        total_tool_uses,
+        total_cycles,
+        avg_tool_uses_per_session,
+        agent_session_ratio,
+        by_hour,
+        by_weekday,
+        peak_hour,
+        cost_breakdown,
+        total_est_cost_usd: (total_est_cost_usd * 100.0).round() / 100.0,
+        est_tokens_total,
     })
+}
+
+/// Return (input_price_per_mtok, output_price_per_mtok, context_window) for a model.
+fn model_pricing(model: &str) -> (f64, f64, u64) {
+    let m = model.to_lowercase();
+    if m.contains("opus") {
+        (15.0, 75.0, 200_000)
+    } else if m.contains("haiku") {
+        (0.8, 4.0, 200_000)
+    } else if m.contains("sonnet") {
+        (3.0, 15.0, 200_000)
+    } else {
+        (3.0, 15.0, 200_000) // default to sonnet pricing
+    }
 }

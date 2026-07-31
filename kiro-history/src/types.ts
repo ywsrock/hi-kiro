@@ -49,16 +49,38 @@ export interface TagStat {
 export interface ModelCount {
   model_name: string;
   count: number;
+  est_cost_usd: number;
+  total_duration_secs: number;
 }
 
 export interface CwdCount {
   cwd: string;
   count: number;
+  total_messages: number;
+  total_duration_secs: number;
+  total_tool_uses: number;
 }
 
 export interface DateCount {
   date: string;
   count: number;
+}
+
+export interface HourCount {
+  hour: number;
+  count: number;
+}
+
+export interface WeekdayCount {
+  weekday: number;
+  count: number;
+}
+
+export interface CostBreakdown {
+  model_name: string;
+  est_input_tokens: number;
+  est_output_tokens: number;
+  est_cost_usd: number;
 }
 
 export interface StatsData {
@@ -69,6 +91,24 @@ export interface StatsData {
   sessions_by_date: DateCount[];
   avg_context_pct: number;
   most_used_tags: TagStat[];
+
+  total_duration_secs: number;
+  avg_duration_secs: number;
+  longest_session_duration: number;
+  avg_messages_per_session: number;
+
+  total_tool_uses: number;
+  total_cycles: number;
+  avg_tool_uses_per_session: number;
+  agent_session_ratio: number;
+
+  by_hour: HourCount[];
+  by_weekday: WeekdayCount[];
+  peak_hour: number;
+
+  cost_breakdown: CostBreakdown[];
+  total_est_cost_usd: number;
+  est_tokens_total: number;
 }
 
 export interface CodeSnippet {
