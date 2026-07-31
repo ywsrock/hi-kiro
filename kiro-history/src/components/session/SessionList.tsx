@@ -1,6 +1,7 @@
 import { useRef, useCallback, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Star, Copy, Check, Trash2 } from "lucide-react";
+import { useToast } from "../ui/Toast";
 import type { SessionSummary } from "../../types";
 import { api } from "../../api";
 
@@ -50,6 +51,7 @@ interface InlineTitleProps {
 }
 
 function InlineTitle({ sessionId, title, onRename }: InlineTitleProps) {
+  const toast = useToast();
   const [editing, setEditing] = useState(false);
   const divRef = useRef<HTMLDivElement>(null);
 
@@ -77,7 +79,7 @@ function InlineTitle({ sessionId, title, onRename }: InlineTitleProps) {
         await api.renameSession(sessionId, trimmed);
         onRename(sessionId, trimmed);
       } catch (err) {
-        alert(`リネームに失敗しました: ${err}`);
+        toast.error(`リネームに失敗しました: ${err}`);
       }
     }
     setEditing(false);
@@ -227,13 +229,16 @@ export function SessionList({
 
   if (loading) {
     return (
-      <div className="flex-1 p-3 space-y-2">
-        {[...Array(8)].map((_, i) => (
-          <div
-            key={i}
-            className="h-16 rounded animate-pulse"
-            style={{ background: "var(--surface)" }}
-          />
+      <div className="flex-1 p-3 space-y-2 overflow-hidden">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="mx-1 px-3 py-2 rounded" style={{ border: "1px solid var(--border)" }}>
+            <div className="skeleton h-3.5 w-3/4 mb-2" />
+            <div className="skeleton h-2.5 w-1/2 mb-2" />
+            <div className="flex gap-1.5">
+              <div className="skeleton h-4 w-14" />
+              <div className="skeleton h-4 w-20" />
+            </div>
+          </div>
         ))}
       </div>
     );
@@ -241,19 +246,17 @@ export function SessionList({
 
   if (sessions.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          No sessions found
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 py-12">
+        <div style={{ color: "var(--text-muted)", opacity: 0.4 }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-center" style={{ color: "var(--text-secondary)" }}>
+          セッションが見つかりません
         </p>
-      </div>
-    );
-  }
-
-  if (sessions.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          No sessions found
+        <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
+          検索ワードを変えるか、フィルターを解除してください
         </p>
       </div>
     );
@@ -342,7 +345,7 @@ export function SessionList({
                       onSelect(s.session_id);
                     }
                   }}
-                  className="group mx-2 my-1 px-3 py-2 rounded cursor-pointer"
+                  className="session-card group mx-2 my-1 px-3 py-2 rounded cursor-pointer"
                   style={{
                     background: isSelected && !selectMode
                       ? "rgba(34,197,94,0.08)"
@@ -354,7 +357,8 @@ export function SessionList({
                         ? "1px solid rgba(34,197,94,0.4)"
                         : isChecked
                         ? "1px solid rgba(239,68,68,0.4)"
-                        : "1px solid transparent",
+                        : "1px solid var(--border)",
+                    transition: "background 0.15s ease, border-color 0.15s ease",
                   }}
                   role="button"
                   tabIndex={0}
@@ -427,11 +431,16 @@ export function SessionList({
                     </span>
                     {s.model_name && (
                       <span
-                        className="text-xs px-1.5 py-0.5 rounded truncate max-w-24"
-                        style={{ background: "rgba(34,197,94,0.1)", color: "var(--accent)" }}
+                        className="text-xs px-1.5 py-0.5 rounded font-mono truncate max-w-28"
+                        style={{
+                          background: "rgba(34,197,94,0.08)",
+                          color: "var(--accent)",
+                          border: "1px solid rgba(34,197,94,0.2)",
+                          fontSize: "0.65rem",
+                        }}
                         title={s.model_name}
                       >
-                        {s.model_name.replace("claude-", "").replace("-latest", "")}
+                        {s.model_name.replace("claude-", "").replace("-latest", "").replace("-sonnet", " sonnet").replace("-haiku", " haiku").replace("-opus", " opus")}
                       </span>
                     )}
                     {s.tags.slice(0, 2).map((tag) => (

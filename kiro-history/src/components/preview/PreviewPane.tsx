@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css";
 import { Copy, Check, RotateCcw, Download, ChevronDown, ChevronRight, Tag, X, Pencil } from "lucide-react";
+import { useToast } from "../ui/Toast";
 import type { SessionDetail, SessionSummary } from "../../types";
 import { api } from "../../api";
 
@@ -16,11 +17,11 @@ interface PreviewPaneProps {
 function CopyDropdown({ content }: { content: string }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const toast = useToast();
 
   const copyAs = async (asMarkdown: boolean) => {
     let text = content;
     if (!asMarkdown) {
-      // Strip markdown: remove #, **, *, `, etc.
       text = content
         .replace(/#{1,6}\s/g, "")
         .replace(/\*\*(.*?)\*\*/g, "$1")
@@ -32,6 +33,7 @@ function CopyDropdown({ content }: { content: string }) {
         .replace(/^\d+\.\s/gm, "");
     }
     await api.copyToClipboard(text);
+    toast.success(asMarkdown ? "Markdownでコピーしました" : "プレーンテキストでコピーしました");
     setCopied(true);
     setOpen(false);
     setTimeout(() => setCopied(false), 1500);
@@ -185,11 +187,16 @@ function MessageBubble({ role, content }: { role: "User" | "Kiro"; content: stri
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}
               components={{
-                pre: ({ children, ...props }) => (
-                  <div className="relative group/code">
-                    <pre {...props} style={{ position: "relative" }}>{children}</pre>
-                  </div>
-                ),
+                pre: ({ children, ...props }) => {
+                  const codeEl = (children as React.ReactElement)?.props;
+                  const lang = codeEl?.className?.replace("language-", "") ?? "";
+                  return (
+                    <div className="relative group/code">
+                      {lang && <span className="code-lang-badge">{lang}</span>}
+                      <pre {...props} style={{ position: "relative" }}>{children}</pre>
+                    </div>
+                  );
+                },
               }}
             >
               {content}
@@ -248,6 +255,7 @@ function TagEditor({ sessionId, tags, onUpdate }: { sessionId: string; tags: str
 }
 
 export function PreviewPane({ sessionId, onSelectSession }: PreviewPaneProps) {
+  const toast = useToast();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [related, setRelated] = useState<SessionSummary[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -446,10 +454,11 @@ export function PreviewPane({ sessionId, onSelectSession }: PreviewPaneProps) {
             onClick={async () => {
               try {
                 await api.resumeSession(summary.session_id, summary.cwd);
+                toast.success("kiro-cli を起動しました");
               } catch (e) {
                 const cmd = `cd "${summary.cwd}" && kiro-cli chat --resume-id ${summary.session_id}`;
                 await api.copyToClipboard(cmd);
-                alert(`Could not open terminal.\nCommand copied to clipboard:\n${cmd}`);
+                toast.error("ターミナルを起動できませんでした。コマンドをクリップボードにコピーしました。");
               }
             }}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded cursor-pointer font-medium flex-shrink-0"
@@ -485,6 +494,7 @@ function PreviewTitle({
 }) {
   const [editing, setEditing] = useState(false);
   const divRef = useRef<HTMLDivElement>(null);
+  const toast = useToast();
 
   const startEdit = () => {
     setEditing(true);
@@ -507,7 +517,7 @@ function PreviewTitle({
         await api.renameSession(sessionId, trimmed);
         onRename(trimmed);
       } catch (err) {
-        alert(`リネームに失敗しました: ${err}`);
+        toast.error(`リネームに失敗しました: ${err}`);
       }
     }
     setEditing(false);

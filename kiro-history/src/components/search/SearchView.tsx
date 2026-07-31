@@ -6,6 +6,7 @@ import { FilterBar } from "../search/FilterBar";
 import { SessionList } from "../session/SessionList";
 import { PreviewPane } from "../preview/PreviewPane";
 import { DeleteConfirmDialog } from "../session/DeleteConfirmDialog";
+import { useToast } from "../ui/Toast";
 import { api } from "../../api";
 import type { FilterParams, SessionSummary } from "../../types";
 
@@ -21,6 +22,7 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export function SearchView() {
   const { selectedSessionId, setSelectedSessionId, setIndexing, setIndexProgress } = useApp();
+  const toast = useToast();
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<FilterParams>({});
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -110,7 +112,7 @@ export function SearchView() {
       const msg = result.skipped
         .map((sk) => `• ${sk.session_id.slice(0, 8)}… : ${sk.reason}`)
         .join("\n");
-      alert(`削除完了: ${result.deleted.length} 件\n\nスキップ: ${result.skipped.length} 件\n${msg}`);
+      toast.success(`削除完了: ${result.deleted.length}件`); if (result.skipped.length > 0) { const msg = result.skipped.map((sk: {session_id: string; reason: string}) => `${sk.session_id.slice(0,8)}: ${sk.reason}`).join(", "); toast.info(`スキップ: ${result.skipped.length}件 (${msg})`); }
     }
     setDeleteTargets([]);
   };

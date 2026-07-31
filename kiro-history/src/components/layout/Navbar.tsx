@@ -35,10 +35,13 @@ export function Navbar() {
         </span>
 
         <div className="flex items-center gap-2">
-          {indexing && (
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-              Indexing {indexProgress.processed}/{indexProgress.total}
-            </span>
+          {indexing && indexProgress.total > 0 && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                {indexProgress.processed}/{indexProgress.total}
+              </span>
+            </div>
           )}
 
           <button
