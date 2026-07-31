@@ -77,63 +77,134 @@ fn init_schema(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Rebuild index for all sessions from all sources.
+/// Rebuild index using streaming — handles 20GB+ SQLite without loading all data to memory.
 pub fn rebuild_index(
     conn: &Connection,
     sessions_dir: &Path,
     sqlite_db_path: &Path,
     app: Option<&AppHandle>,
 ) -> Result<()> {
-    // Load all sessions
-    let mut all_sessions: Vec<Session> = Vec::new();
-    all_sessions.extend(jsonl::parse_all(sessions_dir));
-    if sqlite_db_path.exists() {
-        all_sessions.extend(sqlite_source::parse_all(sqlite_db_path));
-    }
+    // First pass: count total for progress reporting (cheap)
+    let jsonl_sessions = jsonl::parse_all(sessions_dir);
+    let jsonl_count = jsonl_sessions.len() as u32;
 
-    let total = all_sessions.len() as u32;
-
-    for (i, session) in all_sessions.iter().enumerate() {
-        // Skip sessions in the deleted blacklist
-        let is_deleted: bool = conn
-            .query_row(
-                "SELECT 1 FROM deleted_sessions WHERE session_id = ?1",
-                params![session.id],
-                |_| Ok(true),
-            )
-            .unwrap_or(false);
-        if is_deleted {
-            continue;
+    // Count SQLite sessions quickly (no full parse)
+    let sqlite_count: u32 = if sqlite_db_path.exists() {
+        if let Ok(c) = rusqlite::Connection::open_with_flags(
+            sqlite_db_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        ) {
+            let v1: i64 = c.query_row("SELECT COUNT(*) FROM conversations", [], |r| r.get(0)).unwrap_or(0);
+            let v2: i64 = c.query_row("SELECT COUNT(*) FROM conversations_v2", [], |r| r.get(0)).unwrap_or(0);
+            (v1 + v2) as u32
+        } else {
+            0
         }
+    } else {
+        0
+    };
+    let total = jsonl_count + sqlite_count;
 
-        upsert_session(conn, session)?;
+    let mut processed: u32 = 0;
 
-        // Emit progress every 5 sessions
-        if i % 5 == 0 {
+    // Index JSONL sessions
+    for session in &jsonl_sessions {
+        let is_deleted: bool = conn
+            .query_row("SELECT 1 FROM deleted_sessions WHERE session_id = ?1", params![session.id], |_| Ok(true))
+            .unwrap_or(false);
+        if !is_deleted {
+            upsert_session(conn, session)?;
+        }
+        processed += 1;
+        if processed % 10 == 0 {
             if let Some(app) = app {
-                let _ = app.emit(
-                    "index:progress",
-                    IndexProgress {
-                        processed: i as u32 + 1,
-                        total,
-                    },
-                );
+                let _ = app.emit("index:progress", IndexProgress { processed, total });
             }
         }
     }
+    drop(jsonl_sessions); // Free JSONL memory before SQLite
 
-    // Final progress event
+    // Stream SQLite sessions — never loads all sessions into memory at once
+    if sqlite_db_path.exists() {
+        sqlite_source::stream_all(sqlite_db_path, |meta| {
+            let is_deleted: bool = conn
+                .query_row("SELECT 1 FROM deleted_sessions WHERE session_id = ?1", params![meta.id], |_| Ok(true))
+                .unwrap_or(false);
+            if !is_deleted {
+                let session = Session {
+                    id: meta.id.clone(),
+                    title: meta.title.clone(),
+                    cwd: meta.cwd.clone(),
+                    created_at: meta.created_at,
+                    updated_at: meta.updated_at,
+                    messages: vec![], // not needed for index
+                    model_name: meta.model_name.clone(),
+                    max_context_pct: meta.max_context_pct,
+                    total_tool_uses: meta.total_tool_uses,
+                    total_cycles: meta.total_cycles,
+                    total_duration_secs: meta.total_duration_secs,
+                    source: meta.source.clone(),
+                };
+                // Build full_text from meta (title + cwd + first message snippet)
+                let full_text = format!("{} {} {}", meta.title, meta.cwd, meta.first_user_message);
+                let _ = upsert_session_with_text(conn, &session, &full_text);
+            }
+            processed += 1;
+            if processed % 50 == 0 {
+                if let Some(app) = app {
+                    let _ = app.emit("index:progress", IndexProgress { processed, total });
+                }
+            }
+        });
+    }
+
     if let Some(app) = app {
         let _ = app.emit("index:progress", IndexProgress { processed: total, total });
     }
 
-    // Update last_indexed_at
     let now = chrono::Utc::now().timestamp_millis();
     conn.execute(
         "INSERT OR REPLACE INTO index_meta (key, value) VALUES ('last_indexed_at', ?1)",
         params![now.to_string()],
     )?;
 
+    Ok(())
+}
+
+/// Upsert with externally provided full_text (for streaming, avoids message re-parse).
+pub fn upsert_session_with_text(conn: &Connection, session: &Session, full_text: &str) -> Result<()> {
+    let existing: Option<i64> = conn
+        .query_row("SELECT updated_at FROM sessions_meta WHERE session_id = ?1", params![session.id], |row| row.get(0))
+        .ok();
+
+    if let Some(existing_updated) = existing {
+        if existing_updated >= session.updated_at && session.updated_at > 0 {
+            return Ok(());
+        }
+        conn.execute("DELETE FROM sessions_fts WHERE session_id = ?1", params![session.id])?;
+    }
+
+    conn.execute(
+        "INSERT OR REPLACE INTO sessions_meta
+         (session_id, title, cwd, created_at, updated_at, message_count, source,
+          model_name, max_context_pct, total_tool_uses, total_cycles, total_duration_secs)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![
+            session.id, session.title, session.cwd,
+            session.created_at, session.updated_at,
+            session.messages.len() as i64,
+            session.source.to_string(),
+            session.model_name, session.max_context_pct,
+            session.total_tool_uses, session.total_cycles, session.total_duration_secs,
+        ],
+    )?;
+
+    conn.execute(
+        "INSERT INTO sessions_fts (session_id, title, cwd, full_text) VALUES (?1, ?2, ?3, ?4)",
+        params![session.id, session.title, session.cwd, full_text],
+    )?;
+
+    conn.execute("INSERT OR IGNORE INTO user_data (session_id) VALUES (?1)", params![session.id])?;
     Ok(())
 }
 
