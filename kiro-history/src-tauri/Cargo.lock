@@ -1503,6 +1503,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
+ "tauri-plugin-process",
  "tauri-plugin-shell",
  "tempfile",
  "tokio",
@@ -3586,6 +3587,7 @@ dependencies = [
  "gtk",
  "heck 0.5.0",
  "http",
+ "image",
  "jni",
  "libc",
  "log",
@@ -3753,6 +3755,16 @@ dependencies = [
  "thiserror 2.0.19",
  "toml 1.1.4+spec-1.1.0",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-process"
+version = "2.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d55511a7bf6cd70c8767b02c97bf8134fa434daf3926cfc1be0a0f94132d165a"
+dependencies = [
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

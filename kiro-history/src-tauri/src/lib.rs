@@ -9,6 +9,8 @@ mod types;
 
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::TrayIconBuilder;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,6 +20,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Load config and resolve paths
             let config = state::load_config();
@@ -35,6 +38,59 @@ pub fn run() {
                 config,
             );
             app.manage(Mutex::new(app_state));
+
+            // ── System Tray ──────────────────────────────────────────────
+            let show_item = MenuItem::with_id(app, "show", "ウィンドウを表示", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            let icon = app
+                .default_window_icon()
+                .cloned()
+                .unwrap_or_else(|| {
+                    tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
+                        .expect("tray icon load failed")
+                        .to_owned()
+                });
+
+            let _tray = TrayIconBuilder::new()
+                .icon(icon)
+                .tooltip("hi-kiro")
+                .menu(&menu)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(w) = app.get_webview_window("main") {
+                            if w.is_visible().unwrap_or(false) {
+                                let _ = w.hide();
+                            } else {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // × ボタンでウィンドウを閉じずトレイに格納
+            let window = app.get_webview_window("main").unwrap();
+            let win_clone = window.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = win_clone.hide();
+                }
+            });
 
             // Kick off background index rebuild
             let app_handle: AppHandle = app.handle().clone();
