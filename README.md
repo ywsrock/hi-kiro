@@ -134,3 +134,33 @@ src-tauri/target/release/bundle/
 ## ライセンス
 
 MIT
+---
+
+## 開発に参加する場合 (git hooks)
+
+クローン後、以下を1回実行してください：
+
+```bash
+sh scripts/install-hooks.sh
+```
+
+これにより `git commit` のたびに以下が自動実行されます：
+
+| チェック | 内容 |
+|---|---|
+| `cargo fmt --check` | Rustコードのフォーマット確認 |
+| `cargo clippy` | Rust lintチェック |
+| `cargo test` | Rustユニットテスト |
+
+フォーマットエラーが出た場合は以下で自動修正できます：
+
+```bash
+cd kiro-history/src-tauri && cargo fmt
+```
+
+緊急時のスキップ（非推奨）：
+
+```bash
+git commit --no-verify
+```
+
