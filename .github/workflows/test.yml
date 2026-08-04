@@ -81,6 +81,17 @@ jobs:
           workdir: kiro-history/src-tauri
           key: ${{ matrix.os }}-${{ matrix.channel }}
 
+      - name: Setup Node.js (for frontend dist)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: kiro-history/package-lock.json
+
+      - name: Build frontend (required by tauri::generate_context!)
+        run: npm ci && npm run build
+        working-directory: kiro-history
+
       - name: Check formatting
         run: cargo fmt --check
         working-directory: kiro-history/src-tauri
