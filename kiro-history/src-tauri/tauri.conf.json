@@ -34,7 +34,23 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "ywsrock",
+    "copyright": "Copyright © 2025 ywsrock",
+    "licenseFile": "../LICENSE",
+    "windows": {
+      "digestAlgorithm": "sha256",
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "languages": [
+          "Japanese",
+          "English"
+        ],
+        "displayLanguageSelector": false
+      }
+    }
   },
   "plugins": {
     "shell": {
