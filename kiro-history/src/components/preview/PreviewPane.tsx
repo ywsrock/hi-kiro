@@ -282,6 +282,55 @@ function TagEditor({ sessionId, tags, onUpdate }: { sessionId: string; tags: str
   );
 }
 
+function TagSuggestions({ sessionId, currentTags, onAdd }: {
+  sessionId: string;
+  currentTags: string[];
+  onAdd: (tag: string) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api.suggestTags(sessionId).then((s) => {
+      if (!cancelled) setSuggestions(s.filter((t) => !currentTags.includes(t)));
+    }).catch(() => {}).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [sessionId, currentTags.join(",")]);
+
+  if (loading || suggestions.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+      <span className="text-xs" style={{ color: "var(--text-muted)", flexShrink: 0 }}>提案:</span>
+      {suggestions.map((tag) => (
+        <button
+          key={tag}
+          onClick={() => onAdd(tag)}
+          className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full cursor-pointer transition-colors"
+          style={{
+            background: "var(--border)",
+            color: "var(--text-muted)",
+            border: "1px dashed var(--border)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "var(--accent)";
+            e.currentTarget.style.color = "var(--accent)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)";
+            e.currentTarget.style.color = "var(--text-muted)";
+          }}
+          title={`${tag} を追加`}
+        >
+          + {tag}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function PreviewPane({ sessionId, onSelectSession }: PreviewPaneProps) {
   const toast = useToast();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
@@ -386,8 +435,19 @@ export function PreviewPane({ sessionId, onSelectSession }: PreviewPaneProps) {
             </span>
           )}
         </div>
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <TagEditor sessionId={summary.session_id} tags={tags} onUpdate={setTags} />
+        <div className="mt-2 flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <TagEditor sessionId={summary.session_id} tags={tags} onUpdate={setTags} />
+          <TagSuggestions
+            sessionId={summary.session_id}
+            currentTags={tags}
+            onAdd={async (tag) => {
+              const newTags = [...tags, tag];
+              await api.setTags(summary.session_id, newTags);
+              setTags(newTags);
+            }}
+          />
+          </div>
           {/* View mode toggle */}
           <div
             className="flex items-center rounded overflow-hidden flex-shrink-0"

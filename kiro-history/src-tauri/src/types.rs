@@ -50,10 +50,37 @@ pub struct IndexStats {
 
 // ── Tags ─────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TagStat {
     pub tag: String,
     pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TagMeta {
+    pub tag: String,
+    pub color: String,
+    pub description: String,
+    pub sort_order: i64,
+    pub created_at: i64,
+    pub is_smart: bool,
+    pub count: i64,          // sessions using this tag
+    pub rule_type: Option<String>,
+    pub rule_value: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateTagParams {
+    pub tag: String,
+    pub color: String,
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SmartTagRule {
+    pub tag: String,
+    pub rule_type: String,   // "recent_days","min_duration","min_cycles","no_tags","has_snippets","cwd_prefix"
+    pub rule_value: String,  // JSON string
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────

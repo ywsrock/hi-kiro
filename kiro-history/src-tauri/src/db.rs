@@ -462,3 +462,389 @@ fn model_pricing(model: &str) -> (f64, f64, u64) {
         (3.0, 15.0, 200_000) // default to sonnet pricing
     }
 }
+
+// ── Tag Metadata CRUD ─────────────────────────────────────────────────────────
+
+pub fn get_tag_metadata(conn: &Connection) -> Result<Vec<crate::types::TagMeta>> {
+    // Get all tags from user_data + join with tag_metadata for enriched info
+    let all_tags = get_all_tags(conn)?;
+
+    let mut result: Vec<crate::types::TagMeta> = Vec::new();
+    for ts in &all_tags {
+        let meta: Option<(String, String, i64, i64, i64)> = conn
+            .query_row(
+                "SELECT color, description, sort_order, created_at, is_smart
+                 FROM tag_metadata WHERE tag = ?1",
+                params![ts.tag],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .ok();
+
+        let (rule_type, rule_value) = if meta.as_ref().map(|m| m.4).unwrap_or(0) == 1 {
+            let rule: Option<(String, String)> = conn
+                .query_row(
+                    "SELECT rule_type, rule_value FROM smart_tag_rules WHERE tag = ?1",
+                    params![ts.tag],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .ok();
+            (rule.as_ref().map(|r| r.0.clone()), rule.as_ref().map(|r| r.1.clone()))
+        } else {
+            (None, None)
+        };
+
+        result.push(crate::types::TagMeta {
+            tag: ts.tag.clone(),
+            color: meta.as_ref().map(|m| m.0.clone()).unwrap_or_else(|| "#334155".to_string()),
+            description: meta.as_ref().map(|m| m.1.clone()).unwrap_or_default(),
+            sort_order: meta.as_ref().map(|m| m.2).unwrap_or(0),
+            created_at: meta.as_ref().map(|m| m.3).unwrap_or(0),
+            is_smart: meta.as_ref().map(|m| m.4).unwrap_or(0) == 1,
+            count: ts.count,
+            rule_type,
+            rule_value,
+        });
+    }
+
+    // Sort by sort_order, then count desc
+    result.sort_by(|a, b| {
+        if a.sort_order != b.sort_order {
+            a.sort_order.cmp(&b.sort_order)
+        } else {
+            b.count.cmp(&a.count)
+        }
+    });
+
+    Ok(result)
+}
+
+pub fn create_tag(conn: &Connection, params: &crate::types::CreateTagParams) -> Result<()> {
+    let tag = params.tag.trim().trim_start_matches('#').to_string();
+    let tag = format!("#{}", tag);
+    if tag.len() < 2 || tag.len() > 30 {
+        return Err(anyhow::anyhow!("タグ名は1〜29文字で入力してください"));
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    conn.execute(
+        "INSERT OR IGNORE INTO tag_metadata (tag, color, description, sort_order, created_at, is_smart)
+         VALUES (?1, ?2, ?3, 0, ?4, 0)",
+        rusqlite::params![tag, params.color, params.description, now],
+    )?;
+    Ok(())
+}
+
+pub fn update_tag(conn: &Connection, tag: &str, color: &str, description: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO tag_metadata (tag, color, description, sort_order, created_at, is_smart)
+         VALUES (?1, ?2, ?3, 0, ?4, 0)
+         ON CONFLICT(tag) DO UPDATE SET color = ?2, description = ?3",
+        rusqlite::params![tag, color, description, chrono::Utc::now().timestamp_millis()],
+    )?;
+    Ok(())
+}
+
+pub fn delete_tag_full(conn: &Connection, tag: &str) -> Result<usize> {
+    // Remove from all sessions
+    let mut stmt = conn.prepare("SELECT session_id, tags FROM user_data WHERE tags LIKE ?1")?;
+    let pattern = format!("%{}%", tag);
+    let rows: Vec<(String, String)> = stmt
+        .query_map(rusqlite::params![pattern], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .flatten()
+        .collect();
+
+    let mut affected = 0usize;
+    for (session_id, tags_json) in rows {
+        let mut tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+        if tags.contains(&tag.to_string()) {
+            tags.retain(|t| t != tag);
+            let new_json = serde_json::to_string(&tags)?;
+            conn.execute(
+                "UPDATE user_data SET tags = ?1 WHERE session_id = ?2",
+                rusqlite::params![new_json, session_id],
+            )?;
+            affected += 1;
+        }
+    }
+
+    // Remove metadata
+    conn.execute("DELETE FROM smart_tag_rules WHERE tag = ?1", rusqlite::params![tag])?;
+    conn.execute("DELETE FROM tag_metadata WHERE tag = ?1", rusqlite::params![tag])?;
+    Ok(affected)
+}
+
+pub fn rename_tag(conn: &Connection, old_tag: &str, new_tag: &str) -> Result<usize> {
+    let new_tag = new_tag.trim().trim_start_matches('#');
+    let new_tag = format!("#{}", new_tag);
+
+    // Update all sessions
+    let mut stmt = conn.prepare("SELECT session_id, tags FROM user_data WHERE tags LIKE ?1")?;
+    let pattern = format!("%{}%", old_tag);
+    let rows: Vec<(String, String)> = stmt
+        .query_map(rusqlite::params![pattern], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .flatten()
+        .collect();
+
+    let mut affected = 0usize;
+    for (session_id, tags_json) in rows {
+        let mut tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+        if tags.contains(&old_tag.to_string()) {
+            tags = tags.into_iter().map(|t| if t == old_tag { new_tag.clone() } else { t }).collect();
+            // Dedup in case new_tag already exists
+            tags.dedup();
+            let new_json = serde_json::to_string(&tags)?;
+            conn.execute(
+                "UPDATE user_data SET tags = ?1 WHERE session_id = ?2",
+                rusqlite::params![new_json, session_id],
+            )?;
+            affected += 1;
+        }
+    }
+
+    // Update metadata
+    conn.execute(
+        "INSERT INTO tag_metadata (tag, color, description, sort_order, created_at, is_smart)
+         SELECT ?2, color, description, sort_order, created_at, is_smart FROM tag_metadata WHERE tag = ?1
+         ON CONFLICT(tag) DO NOTHING",
+        rusqlite::params![old_tag, new_tag],
+    )?;
+    conn.execute("DELETE FROM tag_metadata WHERE tag = ?1", rusqlite::params![old_tag])?;
+    Ok(affected)
+}
+
+pub fn merge_tags(conn: &Connection, from_tag: &str, to_tag: &str) -> Result<usize> {
+    // Add to_tag to all sessions that have from_tag
+    let mut stmt = conn.prepare("SELECT session_id, tags FROM user_data WHERE tags LIKE ?1")?;
+    let pattern = format!("%{}%", from_tag);
+    let rows: Vec<(String, String)> = stmt
+        .query_map(rusqlite::params![pattern], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .flatten()
+        .collect();
+
+    let mut affected = 0usize;
+    for (session_id, tags_json) in rows {
+        let mut tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+        if tags.contains(&from_tag.to_string()) {
+            tags.retain(|t| t != from_tag);
+            if !tags.contains(&to_tag.to_string()) {
+                tags.push(to_tag.to_string());
+            }
+            let new_json = serde_json::to_string(&tags)?;
+            conn.execute(
+                "UPDATE user_data SET tags = ?1 WHERE session_id = ?2",
+                rusqlite::params![new_json, session_id],
+            )?;
+            affected += 1;
+        }
+    }
+
+    // Delete merged tag
+    conn.execute("DELETE FROM smart_tag_rules WHERE tag = ?1", rusqlite::params![from_tag])?;
+    conn.execute("DELETE FROM tag_metadata WHERE tag = ?1", rusqlite::params![from_tag])?;
+    Ok(affected)
+}
+
+pub fn set_tag_order(conn: &Connection, tags: &[String]) -> Result<()> {
+    for (i, tag) in tags.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO tag_metadata (tag, color, description, sort_order, created_at, is_smart)
+             VALUES (?1, '#334155', '', ?2, ?3, 0)
+             ON CONFLICT(tag) DO UPDATE SET sort_order = ?2",
+            rusqlite::params![tag, i as i64, chrono::Utc::now().timestamp_millis()],
+        )?;
+    }
+    Ok(())
+}
+
+// ── Smart Tags ────────────────────────────────────────────────────────────────
+
+pub fn create_smart_tag(conn: &Connection, rule: &crate::types::SmartTagRule, color: &str, description: &str) -> Result<()> {
+    let now = chrono::Utc::now().timestamp_millis();
+    conn.execute(
+        "INSERT OR REPLACE INTO tag_metadata (tag, color, description, sort_order, created_at, is_smart)
+         VALUES (?1, ?2, ?3, 0, ?4, 1)",
+        rusqlite::params![rule.tag, color, description, now],
+    )?;
+    conn.execute(
+        "INSERT OR REPLACE INTO smart_tag_rules (tag, rule_type, rule_value) VALUES (?1, ?2, ?3)",
+        rusqlite::params![rule.tag, rule.rule_type, rule.rule_value],
+    )?;
+    Ok(())
+}
+
+pub fn get_sessions_by_tag(conn: &Connection, tags: &[String], mode: &str) -> Result<Vec<SessionSummary>> {
+    if tags.is_empty() {
+        // Return untagged sessions
+        let mut stmt = conn.prepare(
+            "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+                    m.message_count, m.source, m.model_name, m.max_context_pct,
+                    m.total_tool_uses, m.total_cycles, m.total_duration_secs,
+                    COALESCE(u.starred,0), COALESCE(u.tags,'[]')
+             FROM sessions_meta m
+             LEFT JOIN user_data u ON m.session_id = u.session_id
+             WHERE COALESCE(u.tags,'[]') = '[]'
+             ORDER BY m.updated_at DESC LIMIT 500",
+        )?;
+        let rows = stmt.query_map([], row_to_summary)?;
+        return Ok(rows.flatten().collect());
+    }
+
+    // Load all, then filter by AND/OR logic
+    let mut stmt = conn.prepare(
+        "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+                m.message_count, m.source, m.model_name, m.max_context_pct,
+                m.total_tool_uses, m.total_cycles, m.total_duration_secs,
+                COALESCE(u.starred,0), COALESCE(u.tags,'[]')
+         FROM sessions_meta m
+         LEFT JOIN user_data u ON m.session_id = u.session_id
+         ORDER BY m.updated_at DESC LIMIT 500",
+    )?;
+    let rows = stmt.query_map([], row_to_summary)?;
+    let all: Vec<SessionSummary> = rows.flatten().collect();
+
+    let filtered = all.into_iter().filter(|s| {
+        if mode == "AND" {
+            tags.iter().all(|t| s.tags.contains(t))
+        } else {
+            tags.iter().any(|t| s.tags.contains(t))
+        }
+    }).collect();
+
+    Ok(filtered)
+}
+
+pub fn evaluate_smart_tag(conn: &Connection, rule_type: &str, rule_value: &str) -> Result<Vec<SessionSummary>> {
+    let val: serde_json::Value = serde_json::from_str(rule_value).unwrap_or(serde_json::json!({}));
+
+    let sql = match rule_type {
+        "recent_days" => {
+            let days = val["days"].as_i64().unwrap_or(7);
+            let cutoff = chrono::Utc::now().timestamp_millis() - days * 86_400_000;
+            format!("SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+                m.message_count, m.source, m.model_name, m.max_context_pct,
+                m.total_tool_uses, m.total_cycles, m.total_duration_secs,
+                COALESCE(u.starred,0), COALESCE(u.tags,'[]')
+             FROM sessions_meta m LEFT JOIN user_data u ON m.session_id = u.session_id
+             WHERE m.updated_at > {} ORDER BY m.updated_at DESC LIMIT 200", cutoff)
+        }
+        "min_duration" => {
+            let secs = val["seconds"].as_i64().unwrap_or(300);
+            format!("SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+                m.message_count, m.source, m.model_name, m.max_context_pct,
+                m.total_tool_uses, m.total_cycles, m.total_duration_secs,
+                COALESCE(u.starred,0), COALESCE(u.tags,'[]')
+             FROM sessions_meta m LEFT JOIN user_data u ON m.session_id = u.session_id
+             WHERE m.total_duration_secs >= {} ORDER BY m.total_duration_secs DESC LIMIT 200", secs)
+        }
+        "min_cycles" => {
+            let cycles = val["cycles"].as_i64().unwrap_or(3);
+            format!("SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+                m.message_count, m.source, m.model_name, m.max_context_pct,
+                m.total_tool_uses, m.total_cycles, m.total_duration_secs,
+                COALESCE(u.starred,0), COALESCE(u.tags,'[]')
+             FROM sessions_meta m LEFT JOIN user_data u ON m.session_id = u.session_id
+             WHERE m.total_cycles >= {} ORDER BY m.total_cycles DESC LIMIT 200", cycles)
+        }
+        "no_tags" => {
+            "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+                m.message_count, m.source, m.model_name, m.max_context_pct,
+                m.total_tool_uses, m.total_cycles, m.total_duration_secs,
+                COALESCE(u.starred,0), COALESCE(u.tags,'[]')
+             FROM sessions_meta m LEFT JOIN user_data u ON m.session_id = u.session_id
+             WHERE COALESCE(u.tags,'[]') = '[]'
+             ORDER BY m.updated_at DESC LIMIT 200".to_string()
+        }
+        "cwd_prefix" => {
+            let prefix = val["prefix"].as_str().unwrap_or("").to_string();
+            format!("SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+                m.message_count, m.source, m.model_name, m.max_context_pct,
+                m.total_tool_uses, m.total_cycles, m.total_duration_secs,
+                COALESCE(u.starred,0), COALESCE(u.tags,'[]')
+             FROM sessions_meta m LEFT JOIN user_data u ON m.session_id = u.session_id
+             WHERE m.cwd LIKE '{}%' ORDER BY m.updated_at DESC LIMIT 200", prefix)
+        }
+        _ => return Ok(vec![]),
+    };
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], row_to_summary)?;
+    Ok(rows.flatten().collect())
+}
+
+// ── Tag Suggestions ───────────────────────────────────────────────────────────
+
+pub fn suggest_tags(conn: &Connection, session_id: &str) -> Result<Vec<String>> {
+    // Get session info
+    let (title, cwd): (String, String) = conn
+        .query_row(
+            "SELECT title, cwd FROM sessions_meta WHERE session_id = ?1",
+            rusqlite::params![session_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap_or_default();
+
+    let mut suggestions = Vec::new();
+    let text = format!("{} {}", title.to_lowercase(), cwd.to_lowercase());
+
+    // Rule-based tag suggestion from title+cwd keywords
+    let rules: &[(&[&str], &str)] = &[
+        (&["aws", "cloudformation", "cfn", "s3", "ec2", "ecs", "rds", "lambda", "sqs", "sns"], "#aws"),
+        (&["infra", "infrastructure", "terraform", "ansible", "k8s", "kubernetes", "docker"], "#infra"),
+        (&["react", "vue", "svelte", "frontend", "css", "tailwind", "component", "ui"], "#frontend"),
+        (&["python", "rust", "typescript", "javascript", "golang", "java", "ruby"], "#code"),
+        (&["bug", "fix", "error", "issue", "crash", "null", "exception", "エラー", "修正"], "#bug-fix"),
+        (&["test", "spec", "jest", "vitest", "cargo test", "pytest", "e2e", "テスト"], "#testing"),
+        (&["deploy", "release", "build", "ci", "cd", "pipeline", "デプロイ", "リリース"], "#devops"),
+        (&["db", "database", "sql", "sqlite", "postgres", "mysql", "migration", "データ"], "#database"),
+        (&["api", "endpoint", "rest", "graphql", "openapi", "swagger", "http"], "#api"),
+        (&["doc", "readme", "document", "spec", "設計", "仕様", "ドキュメント"], "#docs"),
+        (&["refactor", "cleanup", "rename", "リファクタ", "整理", "改善"], "#refactor"),
+        (&["plan", "design", "architecture", "設計", "計画", "アーキテクチャ"], "#design"),
+        (&["security", "auth", "token", "credential", "セキュリティ", "認証"], "#security"),
+        (&["perf", "performance", "optimize", "speed", "slow", "パフォーマンス", "最適化"], "#performance"),
+    ];
+
+    for (keywords, tag) in rules {
+        if keywords.iter().any(|kw| text.contains(kw)) {
+            suggestions.push(tag.to_string());
+        }
+    }
+
+    // Also suggest existing tags from same cwd (context-aware)
+    let cwd_prefix = cwd.trim_end_matches('/');
+    if !cwd_prefix.is_empty() {
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT u.tags FROM sessions_meta m
+             JOIN user_data u ON m.session_id = u.session_id
+             WHERE m.cwd = ?1 AND u.tags != '[]' AND m.session_id != ?2
+             LIMIT 10"
+        )?;
+        let cwd_tags: Vec<String> = stmt
+            .query_map(rusqlite::params![cwd_prefix, session_id], |r| r.get(0))?
+            .flatten()
+            .flat_map(|s: String| {
+                serde_json::from_str::<Vec<String>>(&s).unwrap_or_default()
+            })
+            .collect();
+
+        for t in cwd_tags {
+            if !suggestions.contains(&t) {
+                suggestions.push(t);
+            }
+        }
+    }
+
+    // Get current tags to exclude
+    let current_tags: Vec<String> = conn
+        .query_row(
+            "SELECT tags FROM user_data WHERE session_id = ?1",
+            rusqlite::params![session_id],
+            |r| r.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+
+    suggestions.retain(|t| !current_tags.contains(t));
+    suggestions.dedup();
+    Ok(suggestions.into_iter().take(6).collect())
+}

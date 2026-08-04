@@ -686,3 +686,71 @@ pub async fn export_sessions_zip_cmd(
     std::fs::write(&output_path, bytes).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+// ── Tag Management Commands ───────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_tag_metadata(state: State<'_, Mutex<AppState>>) -> Result<Vec<crate::types::TagMeta>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::get_tag_metadata(&s.index_conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_tag(params: crate::types::CreateTagParams, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::create_tag(&s.index_conn, &params).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_tag(tag: String, color: String, description: String, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::update_tag(&s.index_conn, &tag, &color, &description).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_tag_full(tag: String, state: State<'_, Mutex<AppState>>) -> Result<usize, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::delete_tag_full(&s.index_conn, &tag).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn rename_tag(old_tag: String, new_tag: String, state: State<'_, Mutex<AppState>>) -> Result<usize, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::rename_tag(&s.index_conn, &old_tag, &new_tag).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn merge_tags(from_tag: String, to_tag: String, state: State<'_, Mutex<AppState>>) -> Result<usize, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::merge_tags(&s.index_conn, &from_tag, &to_tag).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_tag_order(tags: Vec<String>, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::set_tag_order(&s.index_conn, &tags).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_smart_tag(rule: crate::types::SmartTagRule, color: String, description: String, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::create_smart_tag(&s.index_conn, &rule, &color, &description).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_sessions_by_tag(tags: Vec<String>, mode: String, state: State<'_, Mutex<AppState>>) -> Result<Vec<crate::types::SessionSummary>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::get_sessions_by_tag(&s.index_conn, &tags, &mode).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn evaluate_smart_tag(rule_type: String, rule_value: String, state: State<'_, Mutex<AppState>>) -> Result<Vec<crate::types::SessionSummary>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::evaluate_smart_tag(&s.index_conn, &rule_type, &rule_value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn suggest_tags(session_id: String, state: State<'_, Mutex<AppState>>) -> Result<Vec<String>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    db::suggest_tags(&s.index_conn, &session_id).map_err(|e| e.to_string())
+}

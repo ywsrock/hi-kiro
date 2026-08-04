@@ -132,6 +132,17 @@ pub fn run() {
             commands::delete_session,
             commands::delete_sessions_files,
             commands::rename_session,
+            commands::get_tag_metadata,
+            commands::create_tag,
+            commands::update_tag,
+            commands::delete_tag_full,
+            commands::rename_tag,
+            commands::merge_tags,
+            commands::set_tag_order,
+            commands::create_smart_tag,
+            commands::get_sessions_by_tag,
+            commands::evaluate_smart_tag,
+            commands::suggest_tags,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -13,6 +13,9 @@ const DashboardView = lazy(() =>
 const SnippetsView = lazy(() =>
   import("./components/snippets/SnippetsView").then((m) => ({ default: m.SnippetsView }))
 );
+const TagsView = lazy(() =>
+  import("./components/tags/TagsView").then((m) => ({ default: m.TagsView }))
+);
 
 function ViewLoading() {
   return (
@@ -25,13 +28,7 @@ function ViewLoading() {
   );
 }
 
-function TagsView() {
-  return (
-    <div className="flex-1 flex items-center justify-center">
-      <p style={{ color: "var(--text-muted)" }}>Tags — coming soon</p>
-    </div>
-  );
-}
+
 
 function MainContent() {
   const { activeView } = useApp();
@@ -42,7 +39,11 @@ function MainContent() {
       <div className="flex-1 flex overflow-hidden">
         {activeView === "search" && <SearchView />}
         {activeView === "bookmarks" && <BookmarksView />}
-        {activeView === "tags" && <TagsView />}
+        {activeView === "tags" && (
+          <Suspense fallback={<ViewLoading />}>
+            <TagsView />
+          </Suspense>
+        )}
         {activeView === "dashboard" && (
           <Suspense fallback={<ViewLoading />}>
             <DashboardView />

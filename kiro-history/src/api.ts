@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   CodeSnippetWithSession,
+  CreateTagParams,
   DiffResult,
   ExportFormat,
   FileRef,
@@ -8,7 +9,9 @@ import type {
   IndexStats,
   SessionDetail,
   SessionSummary,
+  SmartTagRule,
   StatsData,
+  TagMeta,
   TagStat,
 } from "./types";
 
@@ -81,4 +84,37 @@ export const api = {
 
   renameSession: (sessionId: string, newTitle: string) =>
     invoke<void>("rename_session", { sessionId, newTitle }),
+
+  // ── Tag Management ───────────────────────────────────────────────────────
+  getTagMetadata: () => invoke<TagMeta[]>("get_tag_metadata"),
+
+  createTag: (params: CreateTagParams) =>
+    invoke<void>("create_tag", { params }),
+
+  updateTag: (tag: string, color: string, description: string) =>
+    invoke<void>("update_tag", { tag, color, description }),
+
+  deleteTagFull: (tag: string) =>
+    invoke<number>("delete_tag_full", { tag }),
+
+  renameTag: (oldTag: string, newTag: string) =>
+    invoke<number>("rename_tag", { oldTag, newTag }),
+
+  mergeTags: (fromTag: string, toTag: string) =>
+    invoke<number>("merge_tags", { fromTag, toTag }),
+
+  setTagOrder: (tags: string[]) =>
+    invoke<void>("set_tag_order", { tags }),
+
+  createSmartTag: (rule: SmartTagRule, color: string, description: string) =>
+    invoke<void>("create_smart_tag", { rule, color, description }),
+
+  getSessionsByTag: (tags: string[], mode: "AND" | "OR") =>
+    invoke<SessionSummary[]>("get_sessions_by_tag", { tags, mode }),
+
+  evaluateSmartTag: (ruleType: string, ruleValue: string) =>
+    invoke<SessionSummary[]>("evaluate_smart_tag", { ruleType, ruleValue }),
+
+  suggestTags: (sessionId: string) =>
+    invoke<string[]>("suggest_tags", { sessionId }),
 };

@@ -46,6 +46,38 @@ export interface TagStat {
   count: number;
 }
 
+export interface TagMeta {
+  tag: string;
+  color: string;
+  description: string;
+  sort_order: number;
+  created_at: number;
+  is_smart: boolean;
+  count: number;
+  rule_type?: string;
+  rule_value?: string;
+}
+
+export interface CreateTagParams {
+  tag: string;
+  color: string;
+  description: string;
+}
+
+export interface SmartTagRule {
+  tag: string;
+  rule_type: "recent_days" | "min_duration" | "min_cycles" | "no_tags" | "cwd_prefix";
+  rule_value: string; // JSON string
+}
+
+// Parsed smart tag rule values
+export type SmartTagRuleValue =
+  | { type: "recent_days"; days: number }
+  | { type: "min_duration"; seconds: number }
+  | { type: "min_cycles"; cycles: number }
+  | { type: "no_tags" }
+  | { type: "cwd_prefix"; prefix: string };
+
 export interface ModelCount {
   model_name: string;
   count: number;

@@ -73,6 +73,23 @@ fn init_schema(conn: &Connection) -> Result<()> {
             ON sessions_meta(model_name);
         CREATE INDEX IF NOT EXISTS idx_user_data_starred
             ON user_data(starred) WHERE starred = 1;
+
+        -- Tag metadata (color, description, order)
+        CREATE TABLE IF NOT EXISTS tag_metadata (
+            tag         TEXT PRIMARY KEY,
+            color       TEXT NOT NULL DEFAULT '#334155',
+            description TEXT NOT NULL DEFAULT '',
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            created_at  INTEGER NOT NULL DEFAULT 0,
+            is_smart    INTEGER NOT NULL DEFAULT 0
+        );
+
+        -- Smart tag rules (dynamic tag definitions)
+        CREATE TABLE IF NOT EXISTS smart_tag_rules (
+            tag        TEXT PRIMARY KEY REFERENCES tag_metadata(tag) ON DELETE CASCADE,
+            rule_type  TEXT NOT NULL,
+            rule_value TEXT NOT NULL DEFAULT '{}'
+        );
     ")?;
     Ok(())
 }
