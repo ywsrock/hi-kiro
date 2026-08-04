@@ -520,16 +520,54 @@ fn model_pricing(model: &str) -> (f64, f64, u64) {
 // ── Tag Metadata CRUD ─────────────────────────────────────────────────────────
 
 pub fn get_tag_metadata(conn: &Connection) -> Result<Vec<crate::types::TagMeta>> {
-    // Get all tags from user_data + join with tag_metadata for enriched info
+    // Merge: tags from tag_metadata (created via UI) + tags from user_data (attached to sessions)
+    // tag_metadata が source of truth。user_data にしかないタグも補完する。
     let all_tags = get_all_tags(conn)?;
 
-    let mut result: Vec<crate::types::TagMeta> = Vec::new();
+    // tag_metadataに登録済みのタグを収集
+    let mut known_tags: std::collections::HashSet<String> = {
+        let mut stmt = conn.prepare("SELECT tag FROM tag_metadata")?;
+        let rows: Vec<rusqlite::Result<String>> =
+            stmt.query_map([], |r| r.get::<_, String>(0))?.collect();
+        rows.into_iter().flatten().collect()
+    };
+
+    // user_dataにしかないタグをtag_metadataに自動登録（count > 0 のもの）
+    let now = chrono::Utc::now().timestamp_millis();
     for ts in &all_tags {
+        if !known_tags.contains(&ts.tag) {
+            conn.execute(
+                "INSERT OR IGNORE INTO tag_metadata (tag, color, description, sort_order, created_at, is_smart)
+                 VALUES (?1, '#334155', '', 0, ?2, 0)",
+                params![ts.tag, now],
+            )?;
+            known_tags.insert(ts.tag.clone());
+        }
+    }
+
+    // tag_metadataを全件取得（作成済みタグを含む）
+    let all_meta_tags: Vec<String> = {
+        let mut stmt =
+            conn.prepare("SELECT tag FROM tag_metadata ORDER BY sort_order, created_at")?;
+        let rows: Vec<rusqlite::Result<String>> =
+            stmt.query_map([], |r| r.get::<_, String>(0))?.collect();
+        rows.into_iter().flatten().collect()
+    };
+
+    // tag_countマップ（user_dataから）
+    let tag_count_map: std::collections::HashMap<String, i64> = all_tags
+        .iter()
+        .map(|ts| (ts.tag.clone(), ts.count))
+        .collect();
+
+    let mut result: Vec<crate::types::TagMeta> = Vec::new();
+    for tag_name in &all_meta_tags {
+        // tag_nameをtsとして扱う
         let meta: Option<(String, String, i64, i64, i64)> = conn
             .query_row(
                 "SELECT color, description, sort_order, created_at, is_smart
                  FROM tag_metadata WHERE tag = ?1",
-                params![ts.tag],
+                params![tag_name],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )
             .ok();
@@ -538,7 +576,7 @@ pub fn get_tag_metadata(conn: &Connection) -> Result<Vec<crate::types::TagMeta>>
             let rule: Option<(String, String)> = conn
                 .query_row(
                     "SELECT rule_type, rule_value FROM smart_tag_rules WHERE tag = ?1",
-                    params![ts.tag],
+                    params![tag_name],
                     |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .ok();
@@ -550,8 +588,9 @@ pub fn get_tag_metadata(conn: &Connection) -> Result<Vec<crate::types::TagMeta>>
             (None, None)
         };
 
+        let session_count = *tag_count_map.get(tag_name).unwrap_or(&0);
         result.push(crate::types::TagMeta {
-            tag: ts.tag.clone(),
+            tag: tag_name.clone(),
             color: meta
                 .as_ref()
                 .map(|m| m.0.clone())
@@ -560,7 +599,7 @@ pub fn get_tag_metadata(conn: &Connection) -> Result<Vec<crate::types::TagMeta>>
             sort_order: meta.as_ref().map(|m| m.2).unwrap_or(0),
             created_at: meta.as_ref().map(|m| m.3).unwrap_or(0),
             is_smart: meta.as_ref().map(|m| m.4).unwrap_or(0) == 1,
-            count: ts.count,
+            count: session_count,
             rule_type,
             rule_value,
         });
