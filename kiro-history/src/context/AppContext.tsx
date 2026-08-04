@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useCallback } from "react";
 
 export type View = "search" | "bookmarks" | "tags" | "dashboard" | "snippets" | "settings";
 
@@ -29,11 +29,17 @@ const AppContext = createContext<AppContextValue>({
 });
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [activeView, setActiveView] = useState<View>("search");
+  const [activeView, setActiveViewRaw] = useState<View>("search");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [diffSessionIds, setDiffSessionIds] = useState<[string, string] | null>(null);
   const [indexing, setIndexing] = useState(true);
   const [indexProgress, setIndexProgress] = useState({ processed: 0, total: 0 });
+
+  // ビュー切り替え時に選択中セッションをリセット
+  const setActiveView = useCallback((v: View) => {
+    setActiveViewRaw(v);
+    setSelectedSessionId(null);
+  }, []);
 
   return (
     <AppContext.Provider
