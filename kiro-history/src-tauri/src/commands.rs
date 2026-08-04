@@ -604,10 +604,8 @@ pub fn open_in_editor(path: String) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         let editor = std::env::var("EDITOR").unwrap_or_default();
-        if !editor.is_empty() {
-            if Command::new(&editor).arg(&expanded).spawn().is_ok() {
-                return Ok(());
-            }
+        if !editor.is_empty() && Command::new(&editor).arg(&expanded).spawn().is_ok() {
+            return Ok(());
         }
         for ed in &["code", "vim", "nano", "gedit"] {
             if Command::new(ed).arg(&expanded).spawn().is_ok() {
@@ -623,10 +621,8 @@ pub fn open_in_editor(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let editor = std::env::var("EDITOR").unwrap_or_default();
-        if !editor.is_empty() {
-            if Command::new(&editor).arg(&expanded).spawn().is_ok() {
-                return Ok(());
-            }
+        if !editor.is_empty() && Command::new(&editor).arg(&expanded).spawn().is_ok() {
+            return Ok(());
         }
         Command::new("open")
             .arg(&expanded)

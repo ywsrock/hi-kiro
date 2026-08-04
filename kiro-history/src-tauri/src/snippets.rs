@@ -226,7 +226,7 @@ pub fn find_similar_snippets(
     let code_norm = normalize_code(code);
     let mut similar: Vec<SimilarSnippet> = candidates
         .into_iter()
-        .filter(|s| exclude_id.map_or(true, |id| s.id != id))
+        .filter(|s| exclude_id.is_none_or(|id| s.id != id))
         .filter_map(|s| {
             let sim = jaccard_similarity(&code_norm, &normalize_code(&s.code));
             if sim > 0.4 {
@@ -384,8 +384,7 @@ fn lang_label(lang: &str) -> &str {
 
 fn extract_fn_name(line: &str, prefixes: &[&str]) -> Option<String> {
     for prefix in prefixes {
-        if line.starts_with(prefix) {
-            let rest = &line[prefix.len()..];
+        if let Some(rest) = line.strip_prefix(prefix) {
             let name: String = rest
                 .chars()
                 .take_while(|c| c.is_alphanumeric() || *c == '_')

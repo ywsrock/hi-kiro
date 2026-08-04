@@ -8,12 +8,10 @@ fn main() {
     {
         // Force Wayland backend when WSLg or Wayland is available.
         // This enables Windows IME to work via WSLg's text-input protocol.
-        if std::env::var("GDK_BACKEND").is_err() {
-            if std::env::var("WAYLAND_DISPLAY").is_ok() {
-                // Safety: single-threaded at this point
-                unsafe {
-                    std::env::set_var("GDK_BACKEND", "wayland");
-                }
+        if std::env::var("GDK_BACKEND").is_err() && std::env::var("WAYLAND_DISPLAY").is_ok() {
+            // Safety: single-threaded at this point
+            unsafe {
+                std::env::set_var("GDK_BACKEND", "wayland");
             }
         }
 

@@ -86,6 +86,7 @@ pub fn load_config() -> AppConfig {
 }
 
 /// Save config to disk.
+#[allow(dead_code)]
 pub fn save_config(config: &AppConfig) -> anyhow::Result<()> {
     let config_path = dirs::data_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from("/")))

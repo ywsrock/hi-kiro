@@ -164,7 +164,7 @@ pub fn rebuild_index(
             upsert_session(conn, session)?;
         }
         processed += 1;
-        if processed % 10 == 0 {
+        if processed.is_multiple_of(10) {
             if let Some(app) = app {
                 let _ = app.emit("index:progress", IndexProgress { processed, total });
             }
@@ -202,7 +202,7 @@ pub fn rebuild_index(
                 let _ = upsert_session_with_text(conn, &session, &full_text);
             }
             processed += 1;
-            if processed % 50 == 0 {
+            if processed.is_multiple_of(50) {
                 if let Some(app) = app {
                     let _ = app.emit("index:progress", IndexProgress { processed, total });
                 }

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rusqlite::{params, Connection};
-use serde_json;
+use std::cmp::Reverse;
 
 use crate::types::*;
 
@@ -196,7 +196,7 @@ pub fn get_all_tags(conn: &Connection) -> Result<Vec<TagStat>> {
         .into_iter()
         .map(|(tag, count)| TagStat { tag, count })
         .collect();
-    stats.sort_by(|a, b| b.count.cmp(&a.count));
+    stats.sort_by_key(|b| Reverse(b.count));
     Ok(stats)
 }
 
@@ -229,7 +229,7 @@ pub fn rename_session(conn: &Connection, session_id: &str, new_title: &str) -> R
     )?;
     // Update FTS index: delete old entry and re-insert with new title
     // (FTS5 doesn't support UPDATE on content, so delete + insert)
-    let (cwd, full_text): (String, String) = conn.query_row(
+    let (cwd, _full_text): (String, String) = conn.query_row(
         "SELECT cwd, '' FROM sessions_meta WHERE session_id = ?1",
         params![session_id],
         |r| Ok((r.get(0)?, r.get(1)?)),
@@ -277,6 +277,7 @@ pub fn delete_session(conn: &Connection, session_id: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn restore_session(conn: &Connection, session_id: &str) -> Result<()> {
     conn.execute(
         "DELETE FROM deleted_sessions WHERE session_id = ?1",
@@ -312,7 +313,7 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
     // Build cost breakdown per model
     let cost_breakdown: Vec<crate::types::CostBreakdown> = sessions_by_model_raw
         .iter()
-        .map(|(model, _cnt, dur)| {
+        .map(|(model, _cnt, _dur)| {
             let (input_price, output_price, context_window) = model_pricing(model);
             // Estimate: avg context 15%, 70% input / 30% output split
             let avg_ctx_pct = 0.15f64;
@@ -510,10 +511,9 @@ fn model_pricing(model: &str) -> (f64, f64, u64) {
         (15.0, 75.0, 200_000)
     } else if m.contains("haiku") {
         (0.8, 4.0, 200_000)
-    } else if m.contains("sonnet") {
-        (3.0, 15.0, 200_000)
     } else {
-        (3.0, 15.0, 200_000) // default to sonnet pricing
+        // sonnet pricing as default
+        (3.0, 15.0, 200_000)
     }
 }
 

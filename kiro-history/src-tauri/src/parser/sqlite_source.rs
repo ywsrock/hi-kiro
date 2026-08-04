@@ -17,6 +17,7 @@ pub struct SessionMeta {
     pub total_tool_uses: i64,
     pub total_cycles: i64,
     pub total_duration_secs: i64,
+    #[allow(dead_code)]
     pub message_count: usize,
     pub first_user_message: String, // for full_text snippet only
 }
