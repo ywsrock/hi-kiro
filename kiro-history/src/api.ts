@@ -150,4 +150,16 @@ export const api = {
 
   suggestTags: (sessionId: string) =>
     invoke<string[]>("suggest_tags", { sessionId }),
+
+  // ── Config / WSL Path Detection ─────────────────────────────────────────────
+  getConfig: () =>
+    invoke<{ sessions_dir?: string; sqlite_db_path?: string; theme?: string }>("get_config"),
+  saveConfig: (config: { sessions_dir?: string; sqlite_db_path?: string; theme?: string }) =>
+    invoke<void>("save_config_cmd", { config }),
+  detectWslPaths: () =>
+    invoke<{ sessions_dir?: string; sqlite_db_path?: string; distro?: string }>("detect_wsl_paths"),
+  getCurrentPaths: () =>
+    invoke<{ sessions_dir: string; sqlite_db_path: string; index_db_path: string }>(
+      "get_current_paths"
+    ),
 };

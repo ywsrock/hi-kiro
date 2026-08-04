@@ -886,3 +886,30 @@ pub fn get_snippet_stats(
     let s = state.lock().map_err(|e| e.to_string())?;
     crate::snippets::get_snippet_stats(&s.index_conn).map_err(|e| e.to_string())
 }
+
+// ── Config / WSL Path Detection ───────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_config() -> Result<crate::state::AppConfig, String> {
+    Ok(crate::state::load_config())
+}
+
+#[tauri::command]
+pub fn save_config_cmd(config: crate::state::AppConfig) -> Result<(), String> {
+    crate::state::save_config(&config).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn detect_wsl_paths() -> Result<crate::state::DetectedPaths, String> {
+    Ok(crate::state::detect_wsl_paths())
+}
+
+#[tauri::command]
+pub fn get_current_paths(state: State<'_, Mutex<AppState>>) -> Result<serde_json::Value, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "sessions_dir": s.sessions_dir.to_string_lossy(),
+        "sqlite_db_path": s.sqlite_db_path.to_string_lossy(),
+        "index_db_path": s.index_db_path.to_string_lossy(),
+    }))
+}

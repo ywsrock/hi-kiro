@@ -149,6 +149,10 @@ pub fn run() {
             commands::find_similar_snippets,
             commands::suggest_snippet_title,
             commands::get_snippet_stats,
+            commands::get_config,
+            commands::save_config_cmd,
+            commands::detect_wsl_paths,
+            commands::get_current_paths,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
