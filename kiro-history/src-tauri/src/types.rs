@@ -64,7 +64,7 @@ pub struct TagMeta {
     pub sort_order: i64,
     pub created_at: i64,
     pub is_smart: bool,
-    pub count: i64,          // sessions using this tag
+    pub count: i64, // sessions using this tag
     pub rule_type: Option<String>,
     pub rule_value: Option<String>,
 }
@@ -79,8 +79,8 @@ pub struct CreateTagParams {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SmartTagRule {
     pub tag: String,
-    pub rule_type: String,   // "recent_days","min_duration","min_cycles","no_tags","has_snippets","cwd_prefix"
-    pub rule_value: String,  // JSON string
+    pub rule_type: String, // "recent_days","min_duration","min_cycles","no_tags","has_snippets","cwd_prefix"
+    pub rule_value: String, // JSON string
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
@@ -140,21 +140,21 @@ pub struct StatsData {
     pub most_used_tags: Vec<TagStat>,
 
     // ── Productivity ──────────────────────────────
-    pub total_duration_secs: i64,       // total working time
-    pub avg_duration_secs: f64,         // avg session length
-    pub longest_session_duration: i64,  // single longest session
+    pub total_duration_secs: i64,      // total working time
+    pub avg_duration_secs: f64,        // avg session length
+    pub longest_session_duration: i64, // single longest session
     pub avg_messages_per_session: f64,
 
     // ── AI Usage ──────────────────────────────────
     pub total_tool_uses: i64,
-    pub total_cycles: i64,              // agentic loop count
+    pub total_cycles: i64, // agentic loop count
     pub avg_tool_uses_per_session: f64,
-    pub agent_session_ratio: f64,       // sessions with cycles > 0
+    pub agent_session_ratio: f64, // sessions with cycles > 0
 
     // ── Time Patterns ────────────────────────────
-    pub by_hour: Vec<HourCount>,        // 0-23 usage distribution
-    pub by_weekday: Vec<WeekdayCount>,  // 0-6 usage distribution
-    pub peak_hour: u8,                  // most active hour
+    pub by_hour: Vec<HourCount>,       // 0-23 usage distribution
+    pub by_weekday: Vec<WeekdayCount>, // 0-6 usage distribution
+    pub peak_hour: u8,                 // most active hour
 
     // ── Cost Estimate ────────────────────────────
     pub cost_breakdown: Vec<CostBreakdown>,
@@ -214,13 +214,13 @@ pub struct SnippetSearchParams {
     pub language: Option<String>,
     pub tags: Option<Vec<String>>,
     pub starred_only: Option<bool>,
-    pub sort_by: Option<String>,  // "recent" | "used" | "starred"
+    pub sort_by: Option<String>, // "recent" | "used" | "starred"
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SimilarSnippet {
     pub snippet: SavedSnippet,
-    pub similarity: f32,  // 0.0-1.0
+    pub similarity: f32, // 0.0-1.0
 }
 
 #[derive(Debug, Serialize, Deserialize)]

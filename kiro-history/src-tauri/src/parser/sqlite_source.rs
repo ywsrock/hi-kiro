@@ -34,13 +34,15 @@ where
     };
 
     // Optimize SQLite for large sequential reads
-    let _ = conn.execute_batch("
+    let _ = conn.execute_batch(
+        "
         PRAGMA cache_size = -32768;  -- 32MB cache
         PRAGMA mmap_size = 268435456; -- 256MB mmap
         PRAGMA temp_store = memory;
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = NORMAL;
-    ");
+    ",
+    );
 
     let mut count = 0;
     count += stream_v1(&conn, &mut callback);
@@ -52,9 +54,7 @@ fn stream_v1<F>(conn: &Connection, callback: &mut F) -> usize
 where
     F: FnMut(SessionMeta),
 {
-    let mut stmt = match conn.prepare(
-        "SELECT key, value FROM conversations ORDER BY rowid",
-    ) {
+    let mut stmt = match conn.prepare("SELECT key, value FROM conversations ORDER BY rowid") {
         Ok(s) => s,
         Err(_) => return 0,
     };
@@ -104,7 +104,13 @@ where
 
     for row in rows.flatten() {
         let (cwd, conv_id, created_at, updated_at, json_str) = row;
-        if let Ok(mut meta) = extract_meta_only(&json_str, &cwd, SessionSource::SqliteV2, created_at, updated_at) {
+        if let Ok(mut meta) = extract_meta_only(
+            &json_str,
+            &cwd,
+            SessionSource::SqliteV2,
+            created_at,
+            updated_at,
+        ) {
             meta.id = conv_id;
             callback(meta);
             count += 1;
@@ -130,7 +136,9 @@ fn extract_meta_only(
         return Err(());
     }
 
-    let model_name = data["model_info"]["model_name"].as_str().map(|s| s.to_string());
+    let model_name = data["model_info"]["model_name"]
+        .as_str()
+        .map(|s| s.to_string());
 
     // Count messages and extract only first user message (no full allocation)
     let mut message_count = 0usize;
@@ -216,7 +224,9 @@ fn extract_user_text_quick(user: &Value) -> String {
 
 fn extract_assistant_text_quick(assistant: &Value) -> Option<String> {
     if let Some(s) = assistant["Response"]["content"].as_str() {
-        if !s.is_empty() { return Some(s.to_string()); }
+        if !s.is_empty() {
+            return Some(s.to_string());
+        }
     }
     None
 }
@@ -244,9 +254,9 @@ pub fn load_full_session(db_path: &Path, session_id: &str) -> Option<Session> {
 
     // Try v1 (key=cwd, match by conversation_id inside JSON)
     // For v1, we need to scan rows - use JSON match for known ID
-    let mut stmt = conn.prepare(
-        "SELECT key, value FROM conversations WHERE value LIKE ?1 LIMIT 1"
-    ).ok()?;
+    let mut stmt = conn
+        .prepare("SELECT key, value FROM conversations WHERE value LIKE ?1 LIMIT 1")
+        .ok()?;
     let pattern = format!("%\"{}\"% ", session_id);
     if let Ok(row) = stmt.query_row(rusqlite::params![pattern], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
@@ -264,7 +274,9 @@ pub fn load_full_session(db_path: &Path, session_id: &str) -> Option<Session> {
 fn build_full_session(data: &Value, cwd: &str, source: SessionSource) -> Option<Session> {
     let conversation_id = data["conversation_id"].as_str()?.to_string();
     let history = data["history"].as_array()?;
-    let model_name = data["model_info"]["model_name"].as_str().map(|s| s.to_string());
+    let model_name = data["model_info"]["model_name"]
+        .as_str()
+        .map(|s| s.to_string());
 
     let mut messages: Vec<Message> = Vec::new();
     let mut max_context_pct: Option<f32> = None;
@@ -277,12 +289,20 @@ fn build_full_session(data: &Value, cwd: &str, source: SessionSource) -> Option<
             let text = extract_user_text_quick(user);
             if !text.is_empty() {
                 let ts = user["timestamp"].as_i64();
-                messages.push(Message { role: MessageRole::User, content: text, timestamp: ts });
+                messages.push(Message {
+                    role: MessageRole::User,
+                    content: text,
+                    timestamp: ts,
+                });
             }
         }
         if let Some(asst) = turn.get("assistant") {
             if let Some(text) = extract_assistant_text_full(asst) {
-                messages.push(Message { role: MessageRole::Assistant, content: text, timestamp: None });
+                messages.push(Message {
+                    role: MessageRole::Assistant,
+                    content: text,
+                    timestamp: None,
+                });
             }
         }
     }
@@ -299,15 +319,26 @@ fn build_full_session(data: &Value, cwd: &str, source: SessionSource) -> Option<
         }
     }
 
-    if messages.is_empty() { return None; }
+    if messages.is_empty() {
+        return None;
+    }
 
     let title = data["latest_summary"]
         .as_str()
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .unwrap_or_else(|| {
-            messages.iter().find(|m| m.role == MessageRole::User)
-                .map(|m| { let s: String = m.content.chars().take(50).collect(); if m.content.len() > 50 { format!("{}…", s) } else { s } })
+            messages
+                .iter()
+                .find(|m| m.role == MessageRole::User)
+                .map(|m| {
+                    let s: String = m.content.chars().take(50).collect();
+                    if m.content.len() > 50 {
+                        format!("{}…", s)
+                    } else {
+                        s
+                    }
+                })
                 .unwrap_or_else(|| "Untitled".to_string())
         });
 
@@ -330,14 +361,20 @@ fn build_full_session(data: &Value, cwd: &str, source: SessionSource) -> Option<
 fn extract_assistant_text_full(assistant: &Value) -> Option<String> {
     // String response (most common in SQLite)
     if let Some(s) = assistant["Response"]["content"].as_str() {
-        if !s.is_empty() { return Some(s.to_string()); }
+        if !s.is_empty() {
+            return Some(s.to_string());
+        }
     }
     // Array response
     if let Some(arr) = assistant["Response"]["content"].as_array() {
-        let text: String = arr.iter()
+        let text: String = arr
+            .iter()
             .filter_map(|c| c["text"].as_str().or_else(|| c["data"].as_str()))
-            .collect::<Vec<_>>().join("\n");
-        if !text.is_empty() { return Some(text); }
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !text.is_empty() {
+            return Some(text);
+        }
     }
     None
 }
@@ -375,7 +412,9 @@ mod tests {
     #[test]
     fn test_stream_sqlite() {
         let path = db_path();
-        if !path.exists() { return; }
+        if !path.exists() {
+            return;
+        }
         let mut count = 0usize;
         stream_all(&path, |meta| {
             assert!(!meta.id.is_empty());
@@ -387,7 +426,9 @@ mod tests {
     #[test]
     fn test_parse_sqlite() {
         let path = db_path();
-        if !path.exists() { return; }
+        if !path.exists() {
+            return;
+        }
         let sessions = parse_all(&path);
         assert!(!sessions.is_empty());
     }

@@ -2,7 +2,7 @@
 //! title suggestion, and usage statistics.
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use uuid::Uuid;
 
 use crate::types::{
@@ -48,8 +48,15 @@ pub fn save_snippet(conn: &Connection, p: &SaveSnippetParams) -> Result<SavedSni
           source_cwd, created_at, updated_at, use_count, last_used_at)
          VALUES (?1,?2,?3,?4,?5,?6,0,?7,?8,?9,?9,0,0)",
         params![
-            id, p.title, p.description, p.language, p.code, tags_json,
-            p.source_session_id, p.source_cwd, now,
+            id,
+            p.title,
+            p.description,
+            p.language,
+            p.code,
+            tags_json,
+            p.source_session_id,
+            p.source_cwd,
+            now,
         ],
     )?;
 
@@ -207,9 +214,10 @@ pub fn find_similar_snippets(
     language: &str,
     exclude_id: Option<&str>,
 ) -> Result<Vec<SimilarSnippet>> {
-    let mut stmt = conn.prepare(
-        &format!("{} WHERE language = ?1 ORDER BY updated_at DESC LIMIT 100", SELECT),
-    )?;
+    let mut stmt = conn.prepare(&format!(
+        "{} WHERE language = ?1 ORDER BY updated_at DESC LIMIT 100",
+        SELECT
+    ))?;
     let candidates: Vec<SavedSnippet> = stmt
         .query_map(params![language], row_to_snippet)?
         .flatten()
@@ -222,14 +230,21 @@ pub fn find_similar_snippets(
         .filter_map(|s| {
             let sim = jaccard_similarity(&code_norm, &normalize_code(&s.code));
             if sim > 0.4 {
-                Some(SimilarSnippet { snippet: s, similarity: sim })
+                Some(SimilarSnippet {
+                    snippet: s,
+                    similarity: sim,
+                })
             } else {
                 None
             }
         })
         .collect();
 
-    similar.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
+    similar.sort_by(|a, b| {
+        b.similarity
+            .partial_cmp(&a.similarity)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(similar.into_iter().take(3).collect())
 }
 
@@ -237,15 +252,25 @@ pub fn find_similar_snippets(
 fn normalize_code(code: &str) -> Vec<String> {
     code.lines()
         .map(|l| l.trim().to_lowercase())
-        .filter(|l| !l.is_empty() && !l.starts_with("//") && !l.starts_with("#") && !l.starts_with("--"))
-        .flat_map(|l| l.split_whitespace().map(|w| w.to_string()).collect::<Vec<_>>())
+        .filter(|l| {
+            !l.is_empty() && !l.starts_with("//") && !l.starts_with("#") && !l.starts_with("--")
+        })
+        .flat_map(|l| {
+            l.split_whitespace()
+                .map(|w| w.to_string())
+                .collect::<Vec<_>>()
+        })
         .collect()
 }
 
 /// Jaccard similarity between two token sets.
 fn jaccard_similarity(a: &[String], b: &[String]) -> f32 {
-    if a.is_empty() && b.is_empty() { return 1.0; }
-    if a.is_empty() || b.is_empty() { return 0.0; }
+    if a.is_empty() && b.is_empty() {
+        return 1.0;
+    }
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
     let set_a: std::collections::HashSet<&String> = a.iter().collect();
     let set_b: std::collections::HashSet<&String> = b.iter().collect();
     let intersection = set_a.intersection(&set_b).count();
@@ -258,13 +283,25 @@ fn jaccard_similarity(a: &[String], b: &[String]) -> f32 {
 /// Generate a descriptive title from code + language using rule-based extraction.
 pub fn suggest_snippet_title(language: &str, code: &str) -> String {
     let lines: Vec<&str> = code.lines().filter(|l| !l.trim().is_empty()).collect();
-    if lines.is_empty() { return format!("{} snippet", language); }
+    if lines.is_empty() {
+        return format!("{} snippet", language);
+    }
 
     let first = lines[0].trim();
 
     match language {
         "typescript" | "javascript" => {
-            if let Some(name) = extract_fn_name(first, &["function ", "const ", "async function ", "export function ", "export const ", "class "]) {
+            if let Some(name) = extract_fn_name(
+                first,
+                &[
+                    "function ",
+                    "const ",
+                    "async function ",
+                    "export function ",
+                    "export const ",
+                    "class ",
+                ],
+            ) {
                 return format!("{} - {}", lang_label(language), name);
             }
         }
@@ -274,13 +311,31 @@ pub fn suggest_snippet_title(language: &str, code: &str) -> String {
             }
         }
         "rust" => {
-            if let Some(name) = extract_fn_name(first, &["fn ", "pub fn ", "pub async fn ", "struct ", "enum ", "impl "]) {
+            if let Some(name) = extract_fn_name(
+                first,
+                &[
+                    "fn ",
+                    "pub fn ",
+                    "pub async fn ",
+                    "struct ",
+                    "enum ",
+                    "impl ",
+                ],
+            ) {
                 return format!("Rust - {}", name);
             }
         }
         "sql" => {
             let upper = first.to_uppercase();
-            for kw in &["CREATE TABLE", "CREATE INDEX", "SELECT", "INSERT", "UPDATE", "DELETE", "ALTER"] {
+            for kw in &[
+                "CREATE TABLE",
+                "CREATE INDEX",
+                "SELECT",
+                "INSERT",
+                "UPDATE",
+                "DELETE",
+                "ALTER",
+            ] {
                 if upper.starts_with(kw) {
                     let table = extract_sql_target(first);
                     return format!("SQL {} {}", kw, table).trim().to_string();
@@ -360,7 +415,11 @@ pub fn get_snippet_stats(conn: &Connection) -> Result<SnippetStats> {
         .unwrap_or(0);
 
     let total_uses: i64 = conn
-        .query_row("SELECT COALESCE(SUM(use_count),0) FROM saved_snippets", [], |r| r.get(0))
+        .query_row(
+            "SELECT COALESCE(SUM(use_count),0) FROM saved_snippets",
+            [],
+            |r| r.get(0),
+        )
         .unwrap_or(0);
 
     let mut stmt = conn.prepare(
@@ -371,14 +430,10 @@ pub fn get_snippet_stats(conn: &Connection) -> Result<SnippetStats> {
         .flatten()
         .collect();
 
-    let mut stmt = conn.prepare(
-        &format!("{} ORDER BY use_count DESC LIMIT 5", SELECT),
-    )?;
+    let mut stmt = conn.prepare(&format!("{} ORDER BY use_count DESC LIMIT 5", SELECT))?;
     let most_used: Vec<SavedSnippet> = stmt.query_map([], row_to_snippet)?.flatten().collect();
 
-    let mut stmt = conn.prepare(
-        &format!("{} ORDER BY created_at DESC LIMIT 5", SELECT),
-    )?;
+    let mut stmt = conn.prepare(&format!("{} ORDER BY created_at DESC LIMIT 5", SELECT))?;
     let recently_added: Vec<SavedSnippet> = stmt.query_map([], row_to_snippet)?.flatten().collect();
 
     Ok(SnippetStats {

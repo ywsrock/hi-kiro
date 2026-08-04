@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tauri::{AppHandle, Emitter};
@@ -134,8 +134,12 @@ pub fn rebuild_index(
             sqlite_db_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
         ) {
-            let v1: i64 = c.query_row("SELECT COUNT(*) FROM conversations", [], |r| r.get(0)).unwrap_or(0);
-            let v2: i64 = c.query_row("SELECT COUNT(*) FROM conversations_v2", [], |r| r.get(0)).unwrap_or(0);
+            let v1: i64 = c
+                .query_row("SELECT COUNT(*) FROM conversations", [], |r| r.get(0))
+                .unwrap_or(0);
+            let v2: i64 = c
+                .query_row("SELECT COUNT(*) FROM conversations_v2", [], |r| r.get(0))
+                .unwrap_or(0);
             (v1 + v2) as u32
         } else {
             0
@@ -150,7 +154,11 @@ pub fn rebuild_index(
     // Index JSONL sessions
     for session in &jsonl_sessions {
         let is_deleted: bool = conn
-            .query_row("SELECT 1 FROM deleted_sessions WHERE session_id = ?1", params![session.id], |_| Ok(true))
+            .query_row(
+                "SELECT 1 FROM deleted_sessions WHERE session_id = ?1",
+                params![session.id],
+                |_| Ok(true),
+            )
             .unwrap_or(false);
         if !is_deleted {
             upsert_session(conn, session)?;
@@ -168,7 +176,11 @@ pub fn rebuild_index(
     if sqlite_db_path.exists() {
         sqlite_source::stream_all(sqlite_db_path, |meta| {
             let is_deleted: bool = conn
-                .query_row("SELECT 1 FROM deleted_sessions WHERE session_id = ?1", params![meta.id], |_| Ok(true))
+                .query_row(
+                    "SELECT 1 FROM deleted_sessions WHERE session_id = ?1",
+                    params![meta.id],
+                    |_| Ok(true),
+                )
                 .unwrap_or(false);
             if !is_deleted {
                 let session = Session {
@@ -199,7 +211,13 @@ pub fn rebuild_index(
     }
 
     if let Some(app) = app {
-        let _ = app.emit("index:progress", IndexProgress { processed: total, total });
+        let _ = app.emit(
+            "index:progress",
+            IndexProgress {
+                processed: total,
+                total,
+            },
+        );
     }
 
     let now = chrono::Utc::now().timestamp_millis();
@@ -212,16 +230,27 @@ pub fn rebuild_index(
 }
 
 /// Upsert with externally provided full_text (for streaming, avoids message re-parse).
-pub fn upsert_session_with_text(conn: &Connection, session: &Session, full_text: &str) -> Result<()> {
+pub fn upsert_session_with_text(
+    conn: &Connection,
+    session: &Session,
+    full_text: &str,
+) -> Result<()> {
     let existing: Option<i64> = conn
-        .query_row("SELECT updated_at FROM sessions_meta WHERE session_id = ?1", params![session.id], |row| row.get(0))
+        .query_row(
+            "SELECT updated_at FROM sessions_meta WHERE session_id = ?1",
+            params![session.id],
+            |row| row.get(0),
+        )
         .ok();
 
     if let Some(existing_updated) = existing {
         if existing_updated >= session.updated_at && session.updated_at > 0 {
             return Ok(());
         }
-        conn.execute("DELETE FROM sessions_fts WHERE session_id = ?1", params![session.id])?;
+        conn.execute(
+            "DELETE FROM sessions_fts WHERE session_id = ?1",
+            params![session.id],
+        )?;
     }
 
     conn.execute(
@@ -230,12 +259,18 @@ pub fn upsert_session_with_text(conn: &Connection, session: &Session, full_text:
           model_name, max_context_pct, total_tool_uses, total_cycles, total_duration_secs)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
-            session.id, session.title, session.cwd,
-            session.created_at, session.updated_at,
+            session.id,
+            session.title,
+            session.cwd,
+            session.created_at,
+            session.updated_at,
             session.messages.len() as i64,
             session.source.to_string(),
-            session.model_name, session.max_context_pct,
-            session.total_tool_uses, session.total_cycles, session.total_duration_secs,
+            session.model_name,
+            session.max_context_pct,
+            session.total_tool_uses,
+            session.total_cycles,
+            session.total_duration_secs,
         ],
     )?;
 
@@ -244,7 +279,10 @@ pub fn upsert_session_with_text(conn: &Connection, session: &Session, full_text:
         params![session.id, session.title, session.cwd, full_text],
     )?;
 
-    conn.execute("INSERT OR IGNORE INTO user_data (session_id) VALUES (?1)", params![session.id])?;
+    conn.execute(
+        "INSERT OR IGNORE INTO user_data (session_id) VALUES (?1)",
+        params![session.id],
+    )?;
     Ok(())
 }
 
@@ -363,12 +401,8 @@ mod tests {
 
     #[test]
     fn test_rebuild_index() {
-        let sessions_dir = dirs::home_dir()
-            .unwrap()
-            .join(".kiro/sessions/cli");
-        let sqlite_db = dirs::data_dir()
-            .unwrap()
-            .join("kiro-cli/data.sqlite3");
+        let sessions_dir = dirs::home_dir().unwrap().join(".kiro/sessions/cli");
+        let sqlite_db = dirs::data_dir().unwrap().join("kiro-cli/data.sqlite3");
 
         if !sessions_dir.exists() {
             return;

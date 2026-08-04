@@ -27,8 +27,10 @@ fn load_session_by_id(state: &AppState, session_id: &str) -> Option<Session> {
                 if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&meta_str) {
                     let title = meta["title"].as_str().unwrap_or("Untitled").to_string();
                     let cwd = meta["cwd"].as_str().unwrap_or("").to_string();
-                    let created_at = jsonl::parse_rfc3339_to_ms(meta["created_at"].as_str().unwrap_or(""));
-                    let updated_at = jsonl::parse_rfc3339_to_ms(meta["updated_at"].as_str().unwrap_or(""));
+                    let created_at =
+                        jsonl::parse_rfc3339_to_ms(meta["created_at"].as_str().unwrap_or(""));
+                    let updated_at =
+                        jsonl::parse_rfc3339_to_ms(meta["updated_at"].as_str().unwrap_or(""));
                     return Some(crate::models::Session {
                         id: session_id.to_string(),
                         title,
@@ -79,8 +81,7 @@ pub fn search_sessions(
     let state = state.lock().map_err(|e| e.to_string())?;
     let conn = &state.index_conn;
     let filters = filters.unwrap_or_default();
-    db::search_sessions(conn, &query, limit.unwrap_or(200), &filters)
-        .map_err(|e| e.to_string())
+    db::search_sessions(conn, &query, limit.unwrap_or(200), &filters).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -152,8 +153,7 @@ pub fn get_related_sessions(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<Vec<SessionSummary>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    db::get_related_sessions(&state.index_conn, &cwd, &exclude_id, 5)
-        .map_err(|e| e.to_string())
+    db::get_related_sessions(&state.index_conn, &cwd, &exclude_id, 5).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -181,9 +181,7 @@ pub async fn rebuild_index(
 }
 
 #[tauri::command]
-pub fn get_index_stats(
-    state: State<'_, Mutex<AppState>>,
-) -> Result<IndexStats, String> {
+pub fn get_index_stats(state: State<'_, Mutex<AppState>>) -> Result<IndexStats, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(db::get_index_stats(&state.index_conn))
 }
@@ -243,14 +241,7 @@ pub fn resume_session(session_id: String, cwd: String) -> Result<(), String> {
                     // wt.exe wsl.exe --cd <cwd> -- bash -c "kiro-cli chat --resume-id <id>"
                     let result = Command::new(wt)
                         .args([
-                            "wsl.exe",
-                            "--cd",
-                            &cwd_linux,
-                            "--",
-                            "bash",
-                            "-i",
-                            "-c",
-                            &kiro_cmd,
+                            "wsl.exe", "--cd", &cwd_linux, "--", "bash", "-i", "-c", &kiro_cmd,
                         ])
                         .spawn();
                     if result.is_ok() {
@@ -262,15 +253,7 @@ pub fn resume_session(session_id: String, cwd: String) -> Result<(), String> {
             // Fallback: wsl.exe in a new cmd window
             let result = Command::new("/mnt/c/WINDOWS/system32/cmd.exe")
                 .args([
-                    "/c",
-                    "start",
-                    "wsl.exe",
-                    "--cd",
-                    &cwd_linux,
-                    "--",
-                    "bash",
-                    "-i",
-                    "-c",
+                    "/c", "start", "wsl.exe", "--cd", &cwd_linux, "--", "bash", "-i", "-c",
                     &kiro_cmd,
                 ])
                 .spawn();
@@ -278,21 +261,46 @@ pub fn resume_session(session_id: String, cwd: String) -> Result<(), String> {
                 return Ok(());
             }
 
-            return Err("Could not launch Windows Terminal or WSL window. Please run manually:\n".to_string()
-                + &format!("cd {} && {}", cwd_path.display(), kiro_cmd));
+            return Err(
+                "Could not launch Windows Terminal or WSL window. Please run manually:\n"
+                    .to_string()
+                    + &format!("cd {} && {}", cwd_path.display(), kiro_cmd),
+            );
         }
 
         // Native Linux: try common terminals
         let cwd_str = cwd_path.to_string_lossy().to_string();
         let terminals: &[(&str, &[&str])] = &[
-            ("gnome-terminal", &["--working-directory", &cwd_str, "--", "bash", "-i", "-c", &kiro_cmd]),
-            ("x-terminal-emulator", &["-e", &format!("bash -i -c '{}'", kiro_cmd)]),
+            (
+                "gnome-terminal",
+                &[
+                    "--working-directory",
+                    &cwd_str,
+                    "--",
+                    "bash",
+                    "-i",
+                    "-c",
+                    &kiro_cmd,
+                ],
+            ),
+            (
+                "x-terminal-emulator",
+                &["-e", &format!("bash -i -c '{}'", kiro_cmd)],
+            ),
             ("xterm", &["-e", &format!("bash -i -c '{}'", kiro_cmd)]),
-            ("konsole", &["--workdir", &cwd_str, "-e", "bash", "-i", "-c", &kiro_cmd]),
+            (
+                "konsole",
+                &["--workdir", &cwd_str, "-e", "bash", "-i", "-c", &kiro_cmd],
+            ),
         ];
 
         for (term, args) in terminals {
-            if Command::new(term).args(*args).current_dir(&cwd_path).spawn().is_ok() {
+            if Command::new(term)
+                .args(*args)
+                .current_dir(&cwd_path)
+                .spawn()
+                .is_ok()
+            {
                 return Ok(());
             }
         }
@@ -325,7 +333,9 @@ pub fn resume_session(session_id: String, cwd: String) -> Result<(), String> {
             .spawn()
             .or_else(|_| {
                 Command::new("cmd.exe")
-                    .args(["/c", "start", "wsl.exe", "--", "bash", "-i", "-c", &kiro_cmd])
+                    .args([
+                        "/c", "start", "wsl.exe", "--", "bash", "-i", "-c", &kiro_cmd,
+                    ])
                     .spawn()
             })
             .map_err(|e| e.to_string())?;
@@ -372,10 +382,7 @@ pub fn get_bookmarked_sessions(
 
 /// Remove from index only (soft delete).
 #[tauri::command]
-pub fn delete_session(
-    session_id: String,
-    state: State<'_, Mutex<AppState>>,
-) -> Result<(), String> {
+pub fn delete_session(session_id: String, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     db::delete_session(&state.index_conn, &session_id).map_err(|e| e.to_string())
 }
@@ -453,16 +460,14 @@ fn delete_jsonl_session(session_id: &str, sessions_dir: &std::path::Path) -> Res
     for ext in &["json", "jsonl", "history", "lock"] {
         let path = sessions_dir.join(format!("{}.{}", session_id, ext));
         if path.exists() {
-            std::fs::remove_file(&path)
-                .map_err(|e| format!("ファイル削除エラー: {}", e))?;
+            std::fs::remove_file(&path).map_err(|e| format!("ファイル削除エラー: {}", e))?;
         }
     }
 
     // Delete subdirectory if exists
     let dir_path = sessions_dir.join(session_id);
     if dir_path.is_dir() {
-        std::fs::remove_dir_all(&dir_path)
-            .map_err(|e| format!("ディレクトリ削除エラー: {}", e))?;
+        std::fs::remove_dir_all(&dir_path).map_err(|e| format!("ディレクトリ削除エラー: {}", e))?;
     }
 
     Ok(())
@@ -473,8 +478,8 @@ fn delete_sqlite_session(session_id: &str, sqlite_db_path: &std::path::Path) -> 
         return Err("SQLiteデータベースが見つかりません".to_string());
     }
 
-    let conn = rusqlite::Connection::open(sqlite_db_path)
-        .map_err(|e| format!("DB接続エラー: {}", e))?;
+    let conn =
+        rusqlite::Connection::open(sqlite_db_path).map_err(|e| format!("DB接続エラー: {}", e))?;
 
     // Try conversations_v2 first
     let affected = conn
@@ -498,8 +503,11 @@ fn delete_sqlite_session(session_id: &str, sqlite_db_path: &std::path::Path) -> 
             .collect();
 
         for key in keys {
-            conn.execute("DELETE FROM conversations WHERE key = ?1", rusqlite::params![key])
-                .map_err(|e| format!("削除エラー: {}", e))?;
+            conn.execute(
+                "DELETE FROM conversations WHERE key = ?1",
+                rusqlite::params![key],
+            )
+            .map_err(|e| format!("削除エラー: {}", e))?;
         }
     }
 
@@ -517,8 +525,7 @@ pub fn rename_session(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<(), String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    db::rename_session(&state.index_conn, &session_id, &new_title)
-        .map_err(|e| e.to_string())
+    db::rename_session(&state.index_conn, &session_id, &new_title).map_err(|e| e.to_string())
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
@@ -607,7 +614,10 @@ pub fn open_in_editor(path: String) -> Result<(), String> {
                 return Ok(());
             }
         }
-        Command::new("xdg-open").arg(&expanded).spawn().map_err(|e| e.to_string())?;
+        Command::new("xdg-open")
+            .arg(&expanded)
+            .spawn()
+            .map_err(|e| e.to_string())?;
     }
 
     #[cfg(target_os = "macos")]
@@ -618,12 +628,17 @@ pub fn open_in_editor(path: String) -> Result<(), String> {
                 return Ok(());
             }
         }
-        Command::new("open").arg(&expanded).spawn().map_err(|e| e.to_string())?;
+        Command::new("open")
+            .arg(&expanded)
+            .spawn()
+            .map_err(|e| e.to_string())?;
     }
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("code").arg(&expanded).spawn()
+        Command::new("code")
+            .arg(&expanded)
+            .spawn()
             .or_else(|_| Command::new("notepad").arg(&expanded).spawn())
             .map_err(|e| e.to_string())?;
     }
@@ -690,19 +705,29 @@ pub async fn export_sessions_zip_cmd(
 // ── Tag Management Commands ───────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_tag_metadata(state: State<'_, Mutex<AppState>>) -> Result<Vec<crate::types::TagMeta>, String> {
+pub fn get_tag_metadata(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<crate::types::TagMeta>, String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     db::get_tag_metadata(&s.index_conn).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn create_tag(params: crate::types::CreateTagParams, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
+pub fn create_tag(
+    params: crate::types::CreateTagParams,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     db::create_tag(&s.index_conn, &params).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn update_tag(tag: String, color: String, description: String, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
+pub fn update_tag(
+    tag: String,
+    color: String,
+    description: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     db::update_tag(&s.index_conn, &tag, &color, &description).map_err(|e| e.to_string())
 }
@@ -714,13 +739,21 @@ pub fn delete_tag_full(tag: String, state: State<'_, Mutex<AppState>>) -> Result
 }
 
 #[tauri::command]
-pub fn rename_tag(old_tag: String, new_tag: String, state: State<'_, Mutex<AppState>>) -> Result<usize, String> {
+pub fn rename_tag(
+    old_tag: String,
+    new_tag: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<usize, String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     db::rename_tag(&s.index_conn, &old_tag, &new_tag).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn merge_tags(from_tag: String, to_tag: String, state: State<'_, Mutex<AppState>>) -> Result<usize, String> {
+pub fn merge_tags(
+    from_tag: String,
+    to_tag: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<usize, String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     db::merge_tags(&s.index_conn, &from_tag, &to_tag).map_err(|e| e.to_string())
 }
@@ -732,25 +765,41 @@ pub fn set_tag_order(tags: Vec<String>, state: State<'_, Mutex<AppState>>) -> Re
 }
 
 #[tauri::command]
-pub fn create_smart_tag(rule: crate::types::SmartTagRule, color: String, description: String, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
+pub fn create_smart_tag(
+    rule: crate::types::SmartTagRule,
+    color: String,
+    description: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     db::create_smart_tag(&s.index_conn, &rule, &color, &description).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn get_sessions_by_tag(tags: Vec<String>, mode: String, state: State<'_, Mutex<AppState>>) -> Result<Vec<crate::types::SessionSummary>, String> {
+pub fn get_sessions_by_tag(
+    tags: Vec<String>,
+    mode: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<crate::types::SessionSummary>, String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     db::get_sessions_by_tag(&s.index_conn, &tags, &mode).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn evaluate_smart_tag(rule_type: String, rule_value: String, state: State<'_, Mutex<AppState>>) -> Result<Vec<crate::types::SessionSummary>, String> {
+pub fn evaluate_smart_tag(
+    rule_type: String,
+    rule_value: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<crate::types::SessionSummary>, String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     db::evaluate_smart_tag(&s.index_conn, &rule_type, &rule_value).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn suggest_tags(session_id: String, state: State<'_, Mutex<AppState>>) -> Result<Vec<String>, String> {
+pub fn suggest_tags(
+    session_id: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<String>, String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     db::suggest_tags(&s.index_conn, &session_id).map_err(|e| e.to_string())
 }
@@ -777,33 +826,32 @@ pub fn update_snippet(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<(), String> {
     let s = state.lock().map_err(|e| e.to_string())?;
-    crate::snippets::update_snippet(&s.index_conn, &id, &title, &description, &language, &code, &tags)
-        .map_err(|e| e.to_string())
+    crate::snippets::update_snippet(
+        &s.index_conn,
+        &id,
+        &title,
+        &description,
+        &language,
+        &code,
+        &tags,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn delete_snippet(
-    id: String,
-    state: State<'_, Mutex<AppState>>,
-) -> Result<(), String> {
+pub fn delete_snippet(id: String, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     crate::snippets::delete_snippet(&s.index_conn, &id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn toggle_snippet_star(
-    id: String,
-    state: State<'_, Mutex<AppState>>,
-) -> Result<bool, String> {
+pub fn toggle_snippet_star(id: String, state: State<'_, Mutex<AppState>>) -> Result<bool, String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     crate::snippets::toggle_snippet_star(&s.index_conn, &id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn increment_snippet_use(
-    id: String,
-    state: State<'_, Mutex<AppState>>,
-) -> Result<(), String> {
+pub fn increment_snippet_use(id: String, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     crate::snippets::increment_use_count(&s.index_conn, &id).map_err(|e| e.to_string())
 }
@@ -814,8 +862,7 @@ pub fn search_saved_snippets(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<Vec<crate::types::SavedSnippet>, String> {
     let s = state.lock().map_err(|e| e.to_string())?;
-    crate::snippets::search_saved_snippets(&s.index_conn, &search_params)
-        .map_err(|e| e.to_string())
+    crate::snippets::search_saved_snippets(&s.index_conn, &search_params).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -826,13 +873,8 @@ pub fn find_similar_snippets(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<Vec<crate::types::SimilarSnippet>, String> {
     let s = state.lock().map_err(|e| e.to_string())?;
-    crate::snippets::find_similar_snippets(
-        &s.index_conn,
-        &code,
-        &language,
-        exclude_id.as_deref(),
-    )
-    .map_err(|e| e.to_string())
+    crate::snippets::find_similar_snippets(&s.index_conn, &code, &language, exclude_id.as_deref())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

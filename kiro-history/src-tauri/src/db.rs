@@ -79,9 +79,7 @@ pub fn search_sessions(
     // Tags filter (post-filter since tags are JSON array in SQLite)
     if let Some(ref tag_filter) = filters.tags {
         if !tag_filter.is_empty() {
-            results.retain(|s| {
-                tag_filter.iter().all(|t| s.tags.contains(t))
-            });
+            results.retain(|s| tag_filter.iter().all(|t| s.tags.contains(t)));
         }
     }
 
@@ -136,7 +134,10 @@ pub fn get_related_sessions(
 
 pub fn get_index_stats(conn: &Connection) -> IndexStats {
     let (session_count, last_indexed_at) = crate::index::get_index_stats(conn);
-    IndexStats { session_count, last_indexed_at }
+    IndexStats {
+        session_count,
+        last_indexed_at,
+    }
 }
 
 // ── Bookmarks / Tags ──────────────────────────────────────────────────────────
@@ -182,8 +183,7 @@ pub fn get_all_tags(conn: &Connection) -> Result<Vec<TagStat>> {
     let mut stmt = conn.prepare("SELECT tags FROM user_data WHERE tags != '[]'")?;
     let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
 
-    let mut tag_counts: std::collections::HashMap<String, i64> =
-        std::collections::HashMap::new();
+    let mut tag_counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
 
     for row in rows.flatten() {
         let tags: Vec<String> = serde_json::from_str(&row).unwrap_or_default();
@@ -234,7 +234,10 @@ pub fn rename_session(conn: &Connection, session_id: &str, new_title: &str) -> R
         params![session_id],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
-    conn.execute("DELETE FROM sessions_fts WHERE session_id = ?1", params![session_id])?;
+    conn.execute(
+        "DELETE FROM sessions_fts WHERE session_id = ?1",
+        params![session_id],
+    )?;
     conn.execute(
         "INSERT INTO sessions_fts (session_id, title, cwd, full_text) VALUES (?1, ?2, ?3, ?4)",
         params![session_id, new_title, cwd, new_title],
@@ -284,11 +287,15 @@ pub fn restore_session(conn: &Connection, session_id: &str) -> Result<()> {
 
 pub fn get_stats(conn: &Connection) -> Result<StatsData> {
     // ── Core ──────────────────────────────────────────────────────────────────
-    let total_sessions: i64 = conn
-        .query_row("SELECT COUNT(*) FROM sessions_meta", [], |r| r.get(0))?;
+    let total_sessions: i64 =
+        conn.query_row("SELECT COUNT(*) FROM sessions_meta", [], |r| r.get(0))?;
 
     let total_messages: i64 = conn
-        .query_row("SELECT COALESCE(SUM(message_count),0) FROM sessions_meta", [], |r| r.get(0))
+        .query_row(
+            "SELECT COALESCE(SUM(message_count),0) FROM sessions_meta",
+            [],
+            |r| r.get(0),
+        )
         .unwrap_or(0);
 
     // Sessions by model (with duration)
@@ -299,37 +306,46 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
     )?;
     let sessions_by_model_raw: Vec<(String, i64, i64)> = stmt
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
-        .flatten().collect();
+        .flatten()
+        .collect();
 
     // Build cost breakdown per model
-    let cost_breakdown: Vec<crate::types::CostBreakdown> = sessions_by_model_raw.iter().map(|(model, _cnt, dur)| {
-        let (input_price, output_price, context_window) = model_pricing(model);
-        // Estimate: avg context 15%, 70% input / 30% output split
-        let avg_ctx_pct = 0.15f64;
-        let est_total_tokens = (avg_ctx_pct * context_window as f64) as i64 * _cnt;
-        let est_input = (est_total_tokens as f64 * 0.7) as i64;
-        let est_output = (est_total_tokens as f64 * 0.3) as i64;
-        let cost = (est_input as f64 / 1_000_000.0) * input_price
-                 + (est_output as f64 / 1_000_000.0) * output_price;
-        crate::types::CostBreakdown {
-            model_name: model.clone(),
-            est_input_tokens: est_input,
-            est_output_tokens: est_output,
-            est_cost_usd: (cost * 100.0).round() / 100.0,
-        }
-    }).collect();
+    let cost_breakdown: Vec<crate::types::CostBreakdown> = sessions_by_model_raw
+        .iter()
+        .map(|(model, _cnt, dur)| {
+            let (input_price, output_price, context_window) = model_pricing(model);
+            // Estimate: avg context 15%, 70% input / 30% output split
+            let avg_ctx_pct = 0.15f64;
+            let est_total_tokens = (avg_ctx_pct * context_window as f64) as i64 * _cnt;
+            let est_input = (est_total_tokens as f64 * 0.7) as i64;
+            let est_output = (est_total_tokens as f64 * 0.3) as i64;
+            let cost = (est_input as f64 / 1_000_000.0) * input_price
+                + (est_output as f64 / 1_000_000.0) * output_price;
+            crate::types::CostBreakdown {
+                model_name: model.clone(),
+                est_input_tokens: est_input,
+                est_output_tokens: est_output,
+                est_cost_usd: (cost * 100.0).round() / 100.0,
+            }
+        })
+        .collect();
 
     let total_est_cost_usd = cost_breakdown.iter().map(|c| c.est_cost_usd).sum::<f64>();
-    let est_tokens_total = cost_breakdown.iter().map(|c| c.est_input_tokens + c.est_output_tokens).sum::<i64>();
+    let est_tokens_total = cost_breakdown
+        .iter()
+        .map(|c| c.est_input_tokens + c.est_output_tokens)
+        .sum::<i64>();
 
-    let sessions_by_model: Vec<crate::types::ModelCount> = sessions_by_model_raw.iter()
+    let sessions_by_model: Vec<crate::types::ModelCount> = sessions_by_model_raw
+        .iter()
         .zip(cost_breakdown.iter())
         .map(|((mn, cnt, dur), cb)| crate::types::ModelCount {
             model_name: mn.clone(),
             count: *cnt,
             est_cost_usd: cb.est_cost_usd,
             total_duration_secs: *dur,
-        }).collect();
+        })
+        .collect();
 
     // Sessions by cwd (top 10, with extra stats)
     let mut stmt = conn.prepare(
@@ -340,14 +356,17 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
          FROM sessions_meta GROUP BY cwd ORDER BY cnt DESC LIMIT 10",
     )?;
     let sessions_by_cwd: Vec<crate::types::CwdCount> = stmt
-        .query_map([], |r| Ok(crate::types::CwdCount {
-            cwd: r.get(0)?,
-            count: r.get(1)?,
-            total_messages: r.get(2)?,
-            total_duration_secs: r.get(3)?,
-            total_tool_uses: r.get(4)?,
-        }))?
-        .flatten().collect();
+        .query_map([], |r| {
+            Ok(crate::types::CwdCount {
+                cwd: r.get(0)?,
+                count: r.get(1)?,
+                total_messages: r.get(2)?,
+                total_duration_secs: r.get(3)?,
+                total_tool_uses: r.get(4)?,
+            })
+        })?
+        .flatten()
+        .collect();
 
     // Sessions by date (daily, last 365 days)
     let mut stmt = conn.prepare(
@@ -357,8 +376,14 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
          GROUP BY d ORDER BY d",
     )?;
     let sessions_by_date: Vec<crate::types::DateCount> = stmt
-        .query_map([], |r| Ok(crate::types::DateCount { date: r.get(0)?, count: r.get(1)? }))?
-        .flatten().collect();
+        .query_map([], |r| {
+            Ok(crate::types::DateCount {
+                date: r.get(0)?,
+                count: r.get(1)?,
+            })
+        })?
+        .flatten()
+        .collect();
 
     // By hour (local time via unixepoch)
     let mut stmt = conn.prepare(
@@ -368,10 +393,20 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
          GROUP BY h ORDER BY h",
     )?;
     let by_hour: Vec<crate::types::HourCount> = stmt
-        .query_map([], |r| Ok(crate::types::HourCount { hour: r.get::<_,u8>(0)?, count: r.get(1)? }))?
-        .flatten().collect();
+        .query_map([], |r| {
+            Ok(crate::types::HourCount {
+                hour: r.get::<_, u8>(0)?,
+                count: r.get(1)?,
+            })
+        })?
+        .flatten()
+        .collect();
 
-    let peak_hour = by_hour.iter().max_by_key(|h| h.count).map(|h| h.hour).unwrap_or(0);
+    let peak_hour = by_hour
+        .iter()
+        .max_by_key(|h| h.count)
+        .map(|h| h.hour)
+        .unwrap_or(0);
 
     // By weekday (0=Sun in strftime)
     let mut stmt = conn.prepare(
@@ -381,8 +416,14 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
          GROUP BY wd ORDER BY wd",
     )?;
     let by_weekday: Vec<crate::types::WeekdayCount> = stmt
-        .query_map([], |r| Ok(crate::types::WeekdayCount { weekday: r.get::<_,u8>(0)?, count: r.get(1)? }))?
-        .flatten().collect();
+        .query_map([], |r| {
+            Ok(crate::types::WeekdayCount {
+                weekday: r.get::<_, u8>(0)?,
+                count: r.get(1)?,
+            })
+        })?
+        .flatten()
+        .collect();
 
     // ── Productivity ──────────────────────────────────────────────────────────
     let (total_duration_secs, avg_duration_secs, longest_session_duration): (i64, f64, i64) = conn
@@ -394,33 +435,46 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
 
     let avg_messages_per_session = if total_sessions > 0 {
         total_messages as f64 / total_sessions as f64
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
     // ── AI Usage ──────────────────────────────────────────────────────────────
-    let (total_tool_uses, total_cycles): (i64, i64) = conn
-        .query_row(
-            "SELECT COALESCE(SUM(total_tool_uses),0), COALESCE(SUM(total_cycles),0) FROM sessions_meta",
-            [],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )?;
+    let (total_tool_uses, total_cycles): (i64, i64) = conn.query_row(
+        "SELECT COALESCE(SUM(total_tool_uses),0), COALESCE(SUM(total_cycles),0) FROM sessions_meta",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
 
     let avg_tool_uses_per_session = if total_sessions > 0 {
         total_tool_uses as f64 / total_sessions as f64
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
     let agent_sessions: i64 = conn
-        .query_row("SELECT COUNT(*) FROM sessions_meta WHERE total_cycles > 0", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM sessions_meta WHERE total_cycles > 0",
+            [],
+            |r| r.get(0),
+        )
         .unwrap_or(0);
     let agent_session_ratio = if total_sessions > 0 {
         agent_sessions as f64 / total_sessions as f64
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
     // ── Context & Tags ────────────────────────────────────────────────────────
     let avg_context_pct: f32 = conn
         .query_row(
             "SELECT AVG(max_context_pct) FROM sessions_meta WHERE max_context_pct IS NOT NULL",
-            [], |r| r.get::<_, Option<f64>>(0),
-        ).ok().flatten().unwrap_or(0.0) as f32;
+            [],
+            |r| r.get::<_, Option<f64>>(0),
+        )
+        .ok()
+        .flatten()
+        .unwrap_or(0.0) as f32;
 
     let most_used_tags = get_all_tags(conn).unwrap_or_default();
 
@@ -488,14 +542,20 @@ pub fn get_tag_metadata(conn: &Connection) -> Result<Vec<crate::types::TagMeta>>
                     |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .ok();
-            (rule.as_ref().map(|r| r.0.clone()), rule.as_ref().map(|r| r.1.clone()))
+            (
+                rule.as_ref().map(|r| r.0.clone()),
+                rule.as_ref().map(|r| r.1.clone()),
+            )
         } else {
             (None, None)
         };
 
         result.push(crate::types::TagMeta {
             tag: ts.tag.clone(),
-            color: meta.as_ref().map(|m| m.0.clone()).unwrap_or_else(|| "#334155".to_string()),
+            color: meta
+                .as_ref()
+                .map(|m| m.0.clone())
+                .unwrap_or_else(|| "#334155".to_string()),
             description: meta.as_ref().map(|m| m.1.clone()).unwrap_or_default(),
             sort_order: meta.as_ref().map(|m| m.2).unwrap_or(0),
             created_at: meta.as_ref().map(|m| m.3).unwrap_or(0),
@@ -538,7 +598,12 @@ pub fn update_tag(conn: &Connection, tag: &str, color: &str, description: &str) 
         "INSERT INTO tag_metadata (tag, color, description, sort_order, created_at, is_smart)
          VALUES (?1, ?2, ?3, 0, ?4, 0)
          ON CONFLICT(tag) DO UPDATE SET color = ?2, description = ?3",
-        rusqlite::params![tag, color, description, chrono::Utc::now().timestamp_millis()],
+        rusqlite::params![
+            tag,
+            color,
+            description,
+            chrono::Utc::now().timestamp_millis()
+        ],
     )?;
     Ok(())
 }
@@ -567,8 +632,14 @@ pub fn delete_tag_full(conn: &Connection, tag: &str) -> Result<usize> {
     }
 
     // Remove metadata
-    conn.execute("DELETE FROM smart_tag_rules WHERE tag = ?1", rusqlite::params![tag])?;
-    conn.execute("DELETE FROM tag_metadata WHERE tag = ?1", rusqlite::params![tag])?;
+    conn.execute(
+        "DELETE FROM smart_tag_rules WHERE tag = ?1",
+        rusqlite::params![tag],
+    )?;
+    conn.execute(
+        "DELETE FROM tag_metadata WHERE tag = ?1",
+        rusqlite::params![tag],
+    )?;
     Ok(affected)
 }
 
@@ -588,7 +659,10 @@ pub fn rename_tag(conn: &Connection, old_tag: &str, new_tag: &str) -> Result<usi
     for (session_id, tags_json) in rows {
         let mut tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
         if tags.contains(&old_tag.to_string()) {
-            tags = tags.into_iter().map(|t| if t == old_tag { new_tag.clone() } else { t }).collect();
+            tags = tags
+                .into_iter()
+                .map(|t| if t == old_tag { new_tag.clone() } else { t })
+                .collect();
             // Dedup in case new_tag already exists
             tags.dedup();
             let new_json = serde_json::to_string(&tags)?;
@@ -607,7 +681,10 @@ pub fn rename_tag(conn: &Connection, old_tag: &str, new_tag: &str) -> Result<usi
          ON CONFLICT(tag) DO NOTHING",
         rusqlite::params![old_tag, new_tag],
     )?;
-    conn.execute("DELETE FROM tag_metadata WHERE tag = ?1", rusqlite::params![old_tag])?;
+    conn.execute(
+        "DELETE FROM tag_metadata WHERE tag = ?1",
+        rusqlite::params![old_tag],
+    )?;
     Ok(affected)
 }
 
@@ -638,8 +715,14 @@ pub fn merge_tags(conn: &Connection, from_tag: &str, to_tag: &str) -> Result<usi
     }
 
     // Delete merged tag
-    conn.execute("DELETE FROM smart_tag_rules WHERE tag = ?1", rusqlite::params![from_tag])?;
-    conn.execute("DELETE FROM tag_metadata WHERE tag = ?1", rusqlite::params![from_tag])?;
+    conn.execute(
+        "DELETE FROM smart_tag_rules WHERE tag = ?1",
+        rusqlite::params![from_tag],
+    )?;
+    conn.execute(
+        "DELETE FROM tag_metadata WHERE tag = ?1",
+        rusqlite::params![from_tag],
+    )?;
     Ok(affected)
 }
 
@@ -657,7 +740,12 @@ pub fn set_tag_order(conn: &Connection, tags: &[String]) -> Result<()> {
 
 // ── Smart Tags ────────────────────────────────────────────────────────────────
 
-pub fn create_smart_tag(conn: &Connection, rule: &crate::types::SmartTagRule, color: &str, description: &str) -> Result<()> {
+pub fn create_smart_tag(
+    conn: &Connection,
+    rule: &crate::types::SmartTagRule,
+    color: &str,
+    description: &str,
+) -> Result<()> {
     let now = chrono::Utc::now().timestamp_millis();
     conn.execute(
         "INSERT OR REPLACE INTO tag_metadata (tag, color, description, sort_order, created_at, is_smart)
@@ -671,7 +759,11 @@ pub fn create_smart_tag(conn: &Connection, rule: &crate::types::SmartTagRule, co
     Ok(())
 }
 
-pub fn get_sessions_by_tag(conn: &Connection, tags: &[String], mode: &str) -> Result<Vec<SessionSummary>> {
+pub fn get_sessions_by_tag(
+    conn: &Connection,
+    tags: &[String],
+    mode: &str,
+) -> Result<Vec<SessionSummary>> {
     if tags.is_empty() {
         // Return untagged sessions
         let mut stmt = conn.prepare(
@@ -701,66 +793,84 @@ pub fn get_sessions_by_tag(conn: &Connection, tags: &[String], mode: &str) -> Re
     let rows = stmt.query_map([], row_to_summary)?;
     let all: Vec<SessionSummary> = rows.flatten().collect();
 
-    let filtered = all.into_iter().filter(|s| {
-        if mode == "AND" {
-            tags.iter().all(|t| s.tags.contains(t))
-        } else {
-            tags.iter().any(|t| s.tags.contains(t))
-        }
-    }).collect();
+    let filtered = all
+        .into_iter()
+        .filter(|s| {
+            if mode == "AND" {
+                tags.iter().all(|t| s.tags.contains(t))
+            } else {
+                tags.iter().any(|t| s.tags.contains(t))
+            }
+        })
+        .collect();
 
     Ok(filtered)
 }
 
-pub fn evaluate_smart_tag(conn: &Connection, rule_type: &str, rule_value: &str) -> Result<Vec<SessionSummary>> {
+pub fn evaluate_smart_tag(
+    conn: &Connection,
+    rule_type: &str,
+    rule_value: &str,
+) -> Result<Vec<SessionSummary>> {
     let val: serde_json::Value = serde_json::from_str(rule_value).unwrap_or(serde_json::json!({}));
 
     let sql = match rule_type {
         "recent_days" => {
             let days = val["days"].as_i64().unwrap_or(7);
             let cutoff = chrono::Utc::now().timestamp_millis() - days * 86_400_000;
-            format!("SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+            format!(
+                "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
                 m.message_count, m.source, m.model_name, m.max_context_pct,
                 m.total_tool_uses, m.total_cycles, m.total_duration_secs,
                 COALESCE(u.starred,0), COALESCE(u.tags,'[]')
              FROM sessions_meta m LEFT JOIN user_data u ON m.session_id = u.session_id
-             WHERE m.updated_at > {} ORDER BY m.updated_at DESC LIMIT 200", cutoff)
+             WHERE m.updated_at > {} ORDER BY m.updated_at DESC LIMIT 200",
+                cutoff
+            )
         }
         "min_duration" => {
             let secs = val["seconds"].as_i64().unwrap_or(300);
-            format!("SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+            format!(
+                "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
                 m.message_count, m.source, m.model_name, m.max_context_pct,
                 m.total_tool_uses, m.total_cycles, m.total_duration_secs,
                 COALESCE(u.starred,0), COALESCE(u.tags,'[]')
              FROM sessions_meta m LEFT JOIN user_data u ON m.session_id = u.session_id
-             WHERE m.total_duration_secs >= {} ORDER BY m.total_duration_secs DESC LIMIT 200", secs)
+             WHERE m.total_duration_secs >= {} ORDER BY m.total_duration_secs DESC LIMIT 200",
+                secs
+            )
         }
         "min_cycles" => {
             let cycles = val["cycles"].as_i64().unwrap_or(3);
-            format!("SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+            format!(
+                "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
                 m.message_count, m.source, m.model_name, m.max_context_pct,
                 m.total_tool_uses, m.total_cycles, m.total_duration_secs,
                 COALESCE(u.starred,0), COALESCE(u.tags,'[]')
              FROM sessions_meta m LEFT JOIN user_data u ON m.session_id = u.session_id
-             WHERE m.total_cycles >= {} ORDER BY m.total_cycles DESC LIMIT 200", cycles)
+             WHERE m.total_cycles >= {} ORDER BY m.total_cycles DESC LIMIT 200",
+                cycles
+            )
         }
-        "no_tags" => {
-            "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+        "no_tags" => "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
                 m.message_count, m.source, m.model_name, m.max_context_pct,
                 m.total_tool_uses, m.total_cycles, m.total_duration_secs,
                 COALESCE(u.starred,0), COALESCE(u.tags,'[]')
              FROM sessions_meta m LEFT JOIN user_data u ON m.session_id = u.session_id
              WHERE COALESCE(u.tags,'[]') = '[]'
-             ORDER BY m.updated_at DESC LIMIT 200".to_string()
-        }
+             ORDER BY m.updated_at DESC LIMIT 200"
+            .to_string(),
         "cwd_prefix" => {
             let prefix = val["prefix"].as_str().unwrap_or("").to_string();
-            format!("SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+            format!(
+                "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
                 m.message_count, m.source, m.model_name, m.max_context_pct,
                 m.total_tool_uses, m.total_cycles, m.total_duration_secs,
                 COALESCE(u.starred,0), COALESCE(u.tags,'[]')
              FROM sessions_meta m LEFT JOIN user_data u ON m.session_id = u.session_id
-             WHERE m.cwd LIKE '{}%' ORDER BY m.updated_at DESC LIMIT 200", prefix)
+             WHERE m.cwd LIKE '{}%' ORDER BY m.updated_at DESC LIMIT 200",
+                prefix
+            )
         }
         _ => return Ok(vec![]),
     };
@@ -787,20 +897,174 @@ pub fn suggest_tags(conn: &Connection, session_id: &str) -> Result<Vec<String>> 
 
     // Rule-based tag suggestion from title+cwd keywords
     let rules: &[(&[&str], &str)] = &[
-        (&["aws", "cloudformation", "cfn", "s3", "ec2", "ecs", "rds", "lambda", "sqs", "sns"], "#aws"),
-        (&["infra", "infrastructure", "terraform", "ansible", "k8s", "kubernetes", "docker"], "#infra"),
-        (&["react", "vue", "svelte", "frontend", "css", "tailwind", "component", "ui"], "#frontend"),
-        (&["python", "rust", "typescript", "javascript", "golang", "java", "ruby"], "#code"),
-        (&["bug", "fix", "error", "issue", "crash", "null", "exception", "エラー", "修正"], "#bug-fix"),
-        (&["test", "spec", "jest", "vitest", "cargo test", "pytest", "e2e", "テスト"], "#testing"),
-        (&["deploy", "release", "build", "ci", "cd", "pipeline", "デプロイ", "リリース"], "#devops"),
-        (&["db", "database", "sql", "sqlite", "postgres", "mysql", "migration", "データ"], "#database"),
-        (&["api", "endpoint", "rest", "graphql", "openapi", "swagger", "http"], "#api"),
-        (&["doc", "readme", "document", "spec", "設計", "仕様", "ドキュメント"], "#docs"),
-        (&["refactor", "cleanup", "rename", "リファクタ", "整理", "改善"], "#refactor"),
-        (&["plan", "design", "architecture", "設計", "計画", "アーキテクチャ"], "#design"),
-        (&["security", "auth", "token", "credential", "セキュリティ", "認証"], "#security"),
-        (&["perf", "performance", "optimize", "speed", "slow", "パフォーマンス", "最適化"], "#performance"),
+        (
+            &[
+                "aws",
+                "cloudformation",
+                "cfn",
+                "s3",
+                "ec2",
+                "ecs",
+                "rds",
+                "lambda",
+                "sqs",
+                "sns",
+            ],
+            "#aws",
+        ),
+        (
+            &[
+                "infra",
+                "infrastructure",
+                "terraform",
+                "ansible",
+                "k8s",
+                "kubernetes",
+                "docker",
+            ],
+            "#infra",
+        ),
+        (
+            &[
+                "react",
+                "vue",
+                "svelte",
+                "frontend",
+                "css",
+                "tailwind",
+                "component",
+                "ui",
+            ],
+            "#frontend",
+        ),
+        (
+            &[
+                "python",
+                "rust",
+                "typescript",
+                "javascript",
+                "golang",
+                "java",
+                "ruby",
+            ],
+            "#code",
+        ),
+        (
+            &[
+                "bug",
+                "fix",
+                "error",
+                "issue",
+                "crash",
+                "null",
+                "exception",
+                "エラー",
+                "修正",
+            ],
+            "#bug-fix",
+        ),
+        (
+            &[
+                "test",
+                "spec",
+                "jest",
+                "vitest",
+                "cargo test",
+                "pytest",
+                "e2e",
+                "テスト",
+            ],
+            "#testing",
+        ),
+        (
+            &[
+                "deploy",
+                "release",
+                "build",
+                "ci",
+                "cd",
+                "pipeline",
+                "デプロイ",
+                "リリース",
+            ],
+            "#devops",
+        ),
+        (
+            &[
+                "db",
+                "database",
+                "sql",
+                "sqlite",
+                "postgres",
+                "mysql",
+                "migration",
+                "データ",
+            ],
+            "#database",
+        ),
+        (
+            &[
+                "api", "endpoint", "rest", "graphql", "openapi", "swagger", "http",
+            ],
+            "#api",
+        ),
+        (
+            &[
+                "doc",
+                "readme",
+                "document",
+                "spec",
+                "設計",
+                "仕様",
+                "ドキュメント",
+            ],
+            "#docs",
+        ),
+        (
+            &[
+                "refactor",
+                "cleanup",
+                "rename",
+                "リファクタ",
+                "整理",
+                "改善",
+            ],
+            "#refactor",
+        ),
+        (
+            &[
+                "plan",
+                "design",
+                "architecture",
+                "設計",
+                "計画",
+                "アーキテクチャ",
+            ],
+            "#design",
+        ),
+        (
+            &[
+                "security",
+                "auth",
+                "token",
+                "credential",
+                "セキュリティ",
+                "認証",
+            ],
+            "#security",
+        ),
+        (
+            &[
+                "perf",
+                "performance",
+                "optimize",
+                "speed",
+                "slow",
+                "パフォーマンス",
+                "最適化",
+            ],
+            "#performance",
+        ),
     ];
 
     for (keywords, tag) in rules {
@@ -816,14 +1080,12 @@ pub fn suggest_tags(conn: &Connection, session_id: &str) -> Result<Vec<String>> 
             "SELECT DISTINCT u.tags FROM sessions_meta m
              JOIN user_data u ON m.session_id = u.session_id
              WHERE m.cwd = ?1 AND u.tags != '[]' AND m.session_id != ?2
-             LIMIT 10"
+             LIMIT 10",
         )?;
         let cwd_tags: Vec<String> = stmt
             .query_map(rusqlite::params![cwd_prefix, session_id], |r| r.get(0))?
             .flatten()
-            .flat_map(|s: String| {
-                serde_json::from_str::<Vec<String>>(&s).unwrap_or_default()
-            })
+            .flat_map(|s: String| serde_json::from_str::<Vec<String>>(&s).unwrap_or_default())
             .collect();
 
         for t in cwd_tags {

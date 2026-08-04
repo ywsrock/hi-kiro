@@ -22,7 +22,11 @@ pub fn parse_all(sessions_dir: &Path) -> Vec<Session> {
 
         // Regular <uuid>.json + <uuid>.jsonl pair
         if path.extension().and_then(|e| e.to_str()) == Some("json") {
-            let stem = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
+            let stem = path
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
             let jsonl_path = path.with_extension("jsonl");
             if jsonl_path.exists() {
                 if let Ok(session) = parse_jsonl_pair(&path, &jsonl_path, &stem) {
@@ -151,7 +155,10 @@ fn parse_tasks_dir(session_dir: &Path, tasks_dir: &Path) -> Result<Session> {
         .with_context(|| format!("Failed to read {}", meta_path.display()))?;
     let meta: Value = serde_json::from_str(&meta_str)?;
 
-    let description = meta["description"].as_str().unwrap_or("Task Session").to_string();
+    let description = meta["description"]
+        .as_str()
+        .unwrap_or("Task Session")
+        .to_string();
     let context_lines: Vec<String> = meta["context"]
         .as_array()
         .unwrap_or(&vec![])
@@ -238,9 +245,7 @@ fn parse_tasks_dir(session_dir: &Path, tasks_dir: &Path) -> Result<Session> {
 }
 
 /// Extract aggregate metadata from session_state.conversation_metadata.user_turn_metadatas
-fn extract_session_meta(
-    meta: &Value,
-) -> (Option<String>, Option<f32>, i64, i64, i64) {
+fn extract_session_meta(meta: &Value) -> (Option<String>, Option<f32>, i64, i64, i64) {
     let model_name = meta["session_state"]["conversation_metadata"]["model_info"]["model_name"]
         .as_str()
         .or_else(|| meta["model_info"]["model_name"].as_str())
@@ -266,7 +271,13 @@ fn extract_session_meta(
         total_duration_secs += turn["turn_duration"]["secs"].as_i64().unwrap_or(0);
     }
 
-    (model_name, max_context_pct, total_tool_uses, total_cycles, total_duration_secs)
+    (
+        model_name,
+        max_context_pct,
+        total_tool_uses,
+        total_cycles,
+        total_duration_secs,
+    )
 }
 
 /// Parse RFC3339 timestamp string to Unix milliseconds.
@@ -282,9 +293,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn sessions_dir() -> PathBuf {
-        dirs::home_dir()
-            .unwrap()
-            .join(".kiro/sessions/cli")
+        dirs::home_dir().unwrap().join(".kiro/sessions/cli")
     }
 
     #[test]

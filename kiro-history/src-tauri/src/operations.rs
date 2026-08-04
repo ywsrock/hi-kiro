@@ -79,10 +79,8 @@ pub fn extract_snippets_with_session(
 
 pub fn extract_file_refs(session: &Session) -> Vec<FileRef> {
     // Match paths starting with /, ~/, or ./
-    let re = Regex::new(
-        r"(?:^|[\s`])((~|/home/[^/\s]+|/[a-zA-Z0-9])[/a-zA-Z0-9._\-]+[a-zA-Z0-9])",
-    )
-    .unwrap();
+    let re = Regex::new(r"(?:^|[\s`])((~|/home/[^/\s]+|/[a-zA-Z0-9])[/a-zA-Z0-9._\-]+[a-zA-Z0-9])")
+        .unwrap();
 
     let mut paths: std::collections::HashSet<String> = std::collections::HashSet::new();
 

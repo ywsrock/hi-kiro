@@ -9,9 +9,9 @@ mod state;
 mod types;
 
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
+use tauri::{AppHandle, Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -28,8 +28,7 @@ pub fn run() {
             let (sessions_dir, sqlite_db_path, index_db_path) = state::resolve_paths(&config);
 
             // Open index DB
-            let conn = index::open_index_db(&index_db_path)
-                .expect("Failed to open index database");
+            let conn = index::open_index_db(&index_db_path).expect("Failed to open index database");
 
             let app_state = state::AppState::new(
                 conn,
@@ -45,14 +44,11 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
-            let icon = app
-                .default_window_icon()
-                .cloned()
-                .unwrap_or_else(|| {
-                    tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
-                        .expect("tray icon load failed")
-                        .to_owned()
-                });
+            let icon = app.default_window_icon().cloned().unwrap_or_else(|| {
+                tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
+                    .expect("tray icon load failed")
+                    .to_owned()
+            });
 
             let _tray = TrayIconBuilder::new()
                 .icon(icon)

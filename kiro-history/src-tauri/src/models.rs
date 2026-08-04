@@ -19,8 +19,8 @@ pub struct Session {
     pub id: String,
     pub title: String,
     pub cwd: String,
-    pub created_at: i64,  // Unix timestamp ms
-    pub updated_at: i64,  // Unix timestamp ms
+    pub created_at: i64, // Unix timestamp ms
+    pub updated_at: i64, // Unix timestamp ms
     pub messages: Vec<Message>,
     pub model_name: Option<String>,
     pub max_context_pct: Option<f32>,
