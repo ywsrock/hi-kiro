@@ -60,10 +60,10 @@ fn load_session_by_id(state: &AppState, session_id: &str) -> Option<Session> {
     }
 
     // Try SQLite: use targeted load (no full scan)
-    if sqlite_path.exists() {
-        if let Some(s) = sqlite_source::load_full_session(&sqlite_path, session_id) {
-            return Some(s);
-        }
+    // Windows UNCパスでは exists() が false を返す場合があるため
+    // exists() に関わらず load を試みる
+    if let Some(s) = sqlite_source::load_full_session(&sqlite_path, session_id) {
+        return Some(s);
     }
 
     None

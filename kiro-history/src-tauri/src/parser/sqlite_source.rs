@@ -250,7 +250,19 @@ fn extract_assistant_text_quick(assistant: &Value) -> Option<String> {
 
 /// Load FULL session with all messages (called only when user opens a session).
 pub fn load_full_session(db_path: &Path, session_id: &str) -> Option<Session> {
-    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    // Windows UNCパス対応: 一時ファイルにコピーしてから開く
+    #[cfg(target_os = "windows")]
+    let (_tmp_path, conn) = {
+        let tmp = std::env::temp_dir().join("hi-kiro-sqlite-full-tmp.db");
+        std::fs::copy(db_path, &tmp).ok()?;
+        let c = Connection::open_with_flags(&tmp, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+        (Some(tmp), c)
+    };
+    #[cfg(not(target_os = "windows"))]
+    let (_tmp_path, conn) = {
+        let c = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+        (None::<std::path::PathBuf>, c)
+    };
     let _ = conn.execute_batch("PRAGMA cache_size = -16384; PRAGMA mmap_size = 134217728;");
 
     // Try v2 first
