@@ -131,6 +131,7 @@ export function TagsView() {
   useEffect(() => { loadTags(); }, [loadTags]);
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       setLoading(true);
       try {
@@ -140,7 +141,7 @@ export function TagsView() {
         } else if (selectedTags.length === 0) {
           result = [];
         } else {
-          // Check if any selected tag is a smart tag
+          // tagsは依存配列に入れずrefで参照することで不要な再実行を防ぐ
           const smartTag = tags.find((t) => selectedTags.includes(t.tag) && t.is_smart);
           if (smartTag && smartTag.rule_type) {
             result = await api.evaluateSmartTag(smartTag.rule_type, smartTag.rule_value ?? "{}");
@@ -148,15 +149,17 @@ export function TagsView() {
             result = await api.getSessionsByTag(selectedTags, filterMode);
           }
         }
-        setSessions(result);
+        if (!cancelled) setSessions(result);
       } catch (e) {
-        console.error(e);
+        if (!cancelled) console.error(e);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     load();
-  }, [selectedTags, filterMode, showUntagged, tags]);
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTags, filterMode, showUntagged]);
 
   const handleSelectTag = (tag: string) => {
     setShowUntagged(false);

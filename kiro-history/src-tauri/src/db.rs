@@ -520,59 +520,48 @@ fn model_pricing(model: &str) -> (f64, f64, u64) {
 // ── Tag Metadata CRUD ─────────────────────────────────────────────────────────
 
 pub fn get_tag_metadata(conn: &Connection) -> Result<Vec<crate::types::TagMeta>> {
-    // Merge: tags from tag_metadata (created via UI) + tags from user_data (attached to sessions)
-    // tag_metadata が source of truth。user_data にしかないタグも補完する。
-    let all_tags = get_all_tags(conn)?;
-
-    // tag_metadataに登録済みのタグを収集
-    let mut known_tags: std::collections::HashSet<String> = {
-        let mut stmt = conn.prepare("SELECT tag FROM tag_metadata")?;
-        let rows: Vec<rusqlite::Result<String>> =
-            stmt.query_map([], |r| r.get::<_, String>(0))?.collect();
-        rows.into_iter().flatten().collect()
-    };
-
-    // user_dataにしかないタグをtag_metadataに自動登録（count > 0 のもの）
+    // user_dataのタグをtag_metadataに一括同期（INSERT OR IGNORE で重複スキップ）
     let now = chrono::Utc::now().timestamp_millis();
-    for ts in &all_tags {
-        if !known_tags.contains(&ts.tag) {
-            conn.execute(
-                "INSERT OR IGNORE INTO tag_metadata (tag, color, description, sort_order, created_at, is_smart)
-                 VALUES (?1, '#334155', '', 0, ?2, 0)",
-                params![ts.tag, now],
-            )?;
-            known_tags.insert(ts.tag.clone());
-        }
-    }
+    conn.execute_batch(&format!(
+        "INSERT OR IGNORE INTO tag_metadata (tag, color, description, sort_order, created_at, is_smart)
+         SELECT DISTINCT value, '#334155', '', 0, {now}, 0
+         FROM user_data, json_each(user_data.tags)
+         WHERE user_data.tags != '[]'"
+    ))?;
 
-    // tag_metadataを全件取得（作成済みタグを含む）
-    let all_meta_tags: Vec<String> = {
-        let mut stmt =
-            conn.prepare("SELECT tag FROM tag_metadata ORDER BY sort_order, created_at")?;
-        let rows: Vec<rusqlite::Result<String>> =
-            stmt.query_map([], |r| r.get::<_, String>(0))?.collect();
-        rows.into_iter().flatten().collect()
-    };
-
-    // tag_countマップ（user_dataから）
-    let tag_count_map: std::collections::HashMap<String, i64> = all_tags
-        .iter()
-        .map(|ts| (ts.tag.clone(), ts.count))
+    // tag_metadataを全件取得（countはuser_dataから集計、SQLでソート済み）
+    let mut stmt = conn.prepare(
+        "SELECT m.tag, m.color, m.description, m.sort_order, m.created_at, m.is_smart,
+                COALESCE(cnt.c, 0) as session_count
+         FROM tag_metadata m
+         LEFT JOIN (
+             SELECT value as tag, COUNT(*) as c
+             FROM user_data, json_each(user_data.tags)
+             WHERE user_data.tags != '[]'
+             GROUP BY value
+         ) cnt ON m.tag = cnt.tag
+         ORDER BY m.sort_order ASC, session_count DESC, m.created_at ASC",
+    )?;
+    type TagRow = (String, String, String, i64, i64, i64, i64);
+    let rows: Vec<rusqlite::Result<TagRow>> = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+            ))
+        })?
         .collect();
 
     let mut result: Vec<crate::types::TagMeta> = Vec::new();
-    for tag_name in &all_meta_tags {
-        // tag_nameをtsとして扱う
-        let meta: Option<(String, String, i64, i64, i64)> = conn
-            .query_row(
-                "SELECT color, description, sort_order, created_at, is_smart
-                 FROM tag_metadata WHERE tag = ?1",
-                params![tag_name],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
-            )
-            .ok();
+    for row in rows.into_iter().flatten() {
+        let (tag_name, color, description, sort_order, created_at, is_smart, session_count) = row;
 
-        let (rule_type, rule_value) = if meta.as_ref().map(|m| m.4).unwrap_or(0) == 1 {
+        let (rule_type, rule_value) = if is_smart == 1 {
             let rule: Option<(String, String)> = conn
                 .query_row(
                     "SELECT rule_type, rule_value FROM smart_tag_rules WHERE tag = ?1",
@@ -588,31 +577,18 @@ pub fn get_tag_metadata(conn: &Connection) -> Result<Vec<crate::types::TagMeta>>
             (None, None)
         };
 
-        let session_count = *tag_count_map.get(tag_name).unwrap_or(&0);
         result.push(crate::types::TagMeta {
-            tag: tag_name.clone(),
-            color: meta
-                .as_ref()
-                .map(|m| m.0.clone())
-                .unwrap_or_else(|| "#334155".to_string()),
-            description: meta.as_ref().map(|m| m.1.clone()).unwrap_or_default(),
-            sort_order: meta.as_ref().map(|m| m.2).unwrap_or(0),
-            created_at: meta.as_ref().map(|m| m.3).unwrap_or(0),
-            is_smart: meta.as_ref().map(|m| m.4).unwrap_or(0) == 1,
+            tag: tag_name,
+            color,
+            description,
+            sort_order,
+            created_at,
+            is_smart: is_smart == 1,
             count: session_count,
             rule_type,
             rule_value,
         });
     }
-
-    // Sort by sort_order, then count desc
-    result.sort_by(|a, b| {
-        if a.sort_order != b.sort_order {
-            a.sort_order.cmp(&b.sort_order)
-        } else {
-            b.count.cmp(&a.count)
-        }
-    });
 
     Ok(result)
 }
