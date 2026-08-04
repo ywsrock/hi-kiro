@@ -238,20 +238,70 @@ function MessageBubble({ role, content }: { role: "User" | "Kiro"; content: stri
 
 function TagEditor({ sessionId, tags, onUpdate }: { sessionId: string; tags: string[]; onUpdate: (tags: string[]) => void }) {
   const [input, setInput] = useState("");
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [filtered, setFiltered] = useState<string[]>([]);
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const addTag = async () => {
-    const tag = input.trim();
-    if (!tag || tags.includes(tag) || tags.length >= 10) return;
-    const newTags = [...tags, tag];
+  // 既存タグ一覧を取得
+  useEffect(() => {
+    api.getTagMetadata().then((metas) => {
+      setAllTags(metas.map((m) => m.tag));
+    }).catch(() => {});
+  }, []);
+
+  const applyTag = async (tag: string) => {
+    const t = tag.startsWith("#") ? tag : `#${tag}`;
+    if (!t || tags.includes(t) || tags.length >= 10) return;
+    const newTags = [...tags, t];
     await api.setTags(sessionId, newTags);
     onUpdate(newTags);
     setInput("");
+    setOpen(false);
+    setActiveIdx(-1);
   };
 
   const removeTag = async (tag: string) => {
     const newTags = tags.filter((t) => t !== tag);
     await api.setTags(sessionId, newTags);
     onUpdate(newTags);
+  };
+
+  const handleInput = (val: string) => {
+    setInput(val);
+    setActiveIdx(-1);
+    if (val.trim().length === 0) {
+      setFiltered([]);
+      setOpen(false);
+      return;
+    }
+    const q = val.toLowerCase().replace(/^#/, "");
+    const matches = allTags.filter(
+      (t) => t.toLowerCase().replace(/^#/, "").includes(q) && !tags.includes(t)
+    ).slice(0, 8);
+    setFiltered(matches);
+    setOpen(matches.length > 0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIdx((i) => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIdx((i) => Math.max(i - 1, -1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (activeIdx >= 0 && filtered[activeIdx]) {
+        applyTag(filtered[activeIdx]);
+      } else {
+        applyTag(input.trim());
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false);
+      setActiveIdx(-1);
+    }
   };
 
   return (
@@ -269,15 +319,54 @@ function TagEditor({ sessionId, tags, onUpdate }: { sessionId: string; tags: str
           </button>
         </span>
       ))}
-      <input
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && addTag()}
-        placeholder="Add tag..."
-        className="text-xs bg-transparent outline-none"
-        style={{ color: "var(--text-primary)", width: "80px" }}
-        aria-label="Add tag"
-      />
+
+      {/* 入力 + ドロップダウン */}
+      <div className="relative">
+        <input
+          ref={inputRef}
+          value={input}
+          onChange={(e) => handleInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onFocus={() => input.trim() && setOpen(filtered.length > 0)}
+          placeholder="Add tag..."
+          className="text-xs bg-transparent outline-none"
+          style={{ color: "var(--text-primary)", width: "80px" }}
+          aria-label="Add tag"
+          aria-autocomplete="list"
+          aria-expanded={open}
+        />
+        {open && (
+          <ul
+            role="listbox"
+            className="absolute left-0 z-50 rounded-lg shadow-xl overflow-hidden"
+            style={{
+              top: "calc(100% + 4px)",
+              minWidth: "160px",
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            {filtered.map((tag, i) => (
+              <li
+                key={tag}
+                role="option"
+                aria-selected={i === activeIdx}
+                onMouseDown={() => applyTag(tag)}
+                onMouseEnter={() => setActiveIdx(i)}
+                className="px-3 py-1.5 text-xs cursor-pointer"
+                style={{
+                  color: "var(--text-primary)",
+                  background: i === activeIdx ? "var(--accent)" : "transparent",
+                  opacity: i === activeIdx ? 1 : 0.85,
+                }}
+              >
+                {tag}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
