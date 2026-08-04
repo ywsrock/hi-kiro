@@ -281,33 +281,21 @@ pub fn load_full_session(db_path: &Path, session_id: &str) -> Option<Session> {
         }
     }
 
-    // Try v1: conversation_id は JSON先頭付近にあるため LIKE で検索
-    // 末尾スペースなし: {"conversation_id":"<uuid>",...}
-    let pattern = format!("%\"{}\"%", session_id);
+    // Try v1: "conversation_id":"<uuid>" キーまで含めたパターンで検索
+    // → 他フィールドに同じUUIDが含まれても誤ヒットしない
+    let pattern = format!("%\"conversation_id\":\"{}\"%", session_id);
     {
         let mut stmt = conn
-            .prepare("SELECT key, value FROM conversations WHERE value LIKE ?1 LIMIT 1")
+            .prepare("SELECT key, value FROM conversations WHERE value LIKE ?1")
             .ok()?;
-        if let Ok(row) = stmt.query_row(rusqlite::params![pattern], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-        }) {
-            let (cwd, json_str) = row;
-            if let Ok(data) = serde_json::from_str::<Value>(&json_str) {
-                if data["conversation_id"].as_str() == Some(session_id) {
-                    return build_full_session(&data, &cwd, SessionSource::SqliteV1);
-                }
-            }
-        }
-    }
-
-    // LIKE検索でヒットしない場合は全件スキャン（フォールバック）
-    {
-        let mut stmt2 = conn.prepare("SELECT key, value FROM conversations").ok()?;
-        let rows: Vec<(String, String)> = stmt2
-            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+        let rows: Vec<(String, String)> = stmt
+            .query_map(rusqlite::params![pattern], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })
             .ok()?
             .flatten()
             .collect();
+        // ヒットした複数行を走査して conversation_id が一致する行を返す
         for (cwd, json_str) in rows {
             if let Ok(data) = serde_json::from_str::<Value>(&json_str) {
                 if data["conversation_id"].as_str() == Some(session_id) {
