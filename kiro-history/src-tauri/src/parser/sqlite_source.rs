@@ -281,18 +281,27 @@ pub fn load_full_session(db_path: &Path, session_id: &str) -> Option<Session> {
         }
     }
 
-    // Try v1 (key=cwd, match by conversation_id inside JSON)
-    // For v1, we need to scan rows - use JSON match for known ID
-    let mut stmt = conn
-        .prepare("SELECT key, value FROM conversations WHERE value LIKE ?1 LIMIT 1")
-        .ok()?;
-    let pattern = format!("%\"{}\"% ", session_id);
-    if let Ok(row) = stmt.query_row(rusqlite::params![pattern], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-    }) {
-        let (cwd, json_str) = row;
-        if let Ok(data) = serde_json::from_str::<Value>(&json_str) {
-            return build_full_session(&data, &cwd, SessionSource::SqliteV1);
+    // Try v1: "conversation_id":"<uuid>" キーまで含めたパターンで検索
+    // → 他フィールドに同じUUIDが含まれても誤ヒットしない
+    let pattern = format!("%\"conversation_id\":\"{}\"%", session_id);
+    {
+        let mut stmt = conn
+            .prepare("SELECT key, value FROM conversations WHERE value LIKE ?1")
+            .ok()?;
+        let rows: Vec<(String, String)> = stmt
+            .query_map(rusqlite::params![pattern], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })
+            .ok()?
+            .flatten()
+            .collect();
+        // ヒットした複数行を走査して conversation_id が一致する行を返す
+        for (cwd, json_str) in rows {
+            if let Ok(data) = serde_json::from_str::<Value>(&json_str) {
+                if data["conversation_id"].as_str() == Some(session_id) {
+                    return build_full_session(&data, &cwd, SessionSource::SqliteV1);
+                }
+            }
         }
     }
 
