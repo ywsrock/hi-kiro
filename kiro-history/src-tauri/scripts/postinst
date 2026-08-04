@@ -1,0 +1,19 @@
+#!/bin/sh
+# hi-kiro post-install script
+# バイナリをリネームしてラッパーに置き換える
+
+BIN=/usr/bin/hi-kiro
+
+# 既存バイナリを hi-kiro-bin にリネーム（初回のみ）
+if [ -f "$BIN" ] && [ ! -f "${BIN}-bin" ]; then
+    mv "$BIN" "${BIN}-bin"
+fi
+
+# ラッパースクリプトを配置
+cat > "$BIN" << 'WRAPPER'
+#!/bin/sh
+# hi-kiro wrapper: バックグラウンドで起動してターミナルを解放する
+exec nohup /usr/bin/hi-kiro-bin "$@" > /dev/null 2>&1 &
+WRAPPER
+
+chmod +x "$BIN"

@@ -50,6 +50,11 @@
         ],
         "displayLanguageSelector": false
       }
+    },
+    "linux": {
+      "deb": {
+        "postInstallScript": "scripts/postinst"
+      }
     }
   },
   "plugins": {
