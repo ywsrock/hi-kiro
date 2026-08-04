@@ -33,7 +33,6 @@ where
     // 一時ファイルにコピーしてから開く
     #[cfg(target_os = "windows")]
     let (conn, _tmp) = {
-        use std::io;
         let tmp = std::env::temp_dir().join("hi-kiro-sqlite-tmp.db");
         if std::fs::copy(db_path, &tmp).is_err() {
             return 0;
