@@ -94,12 +94,19 @@ export function SettingsView() {
   };
 
   const handleReset = async () => {
-    setSessionsDir("");
-    setSqlitePath("");
-    await api.saveConfig({ sessions_dir: undefined, sqlite_db_path: undefined });
-    const paths = await api.getCurrentPaths();
-    setCurrentPaths(paths);
-    toast.success("デフォルトパスにリセットしました");
+    setSaving(true);
+    try {
+      setSessionsDir("");
+      setSqlitePath("");
+      await api.saveConfig({ sessions_dir: undefined, sqlite_db_path: undefined });
+      const paths = await api.getCurrentPaths();
+      setCurrentPaths(paths);
+      toast.success("デフォルトパスにリセットしました");
+    } catch (e) {
+      toast.error(`リセットエラー: ${e}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const inputStyle = {

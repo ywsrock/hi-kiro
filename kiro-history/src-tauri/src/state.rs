@@ -65,7 +65,13 @@ pub fn list_wsl_distros() -> Vec<String> {
             let s = String::from_utf16_lossy(&utf16);
             return s
                 .lines()
-                .map(|l| l.trim().trim_end_matches('\0').to_string())
+                .map(|l| {
+                    // BOM (U+FEFF) と null文字を除去
+                    l.trim()
+                        .trim_start_matches('\u{FEFF}')
+                        .trim_end_matches('\0')
+                        .to_string()
+                })
                 .filter(|l| !l.is_empty())
                 .collect();
         }
@@ -172,14 +178,18 @@ pub fn resolve_paths(config: &AppConfig) -> (PathBuf, PathBuf, PathBuf) {
     let data = dirs::data_dir().unwrap_or_else(|| home.join(".local/share"));
 
     // config で明示指定されている場合はそれを優先
+    // Windows の場合: WSL2 パスを1回だけ検出して使い回す
+    #[cfg(target_os = "windows")]
+    let detected = detect_wsl_paths();
+
     let sessions_dir = if let Some(ref p) = config.sessions_dir {
         PathBuf::from(p)
     } else {
-        // Windows の場合: WSL2 パスを自動検出
         #[cfg(target_os = "windows")]
         {
-            detect_wsl_paths()
+            detected
                 .sessions_dir
+                .as_deref()
                 .map(PathBuf::from)
                 .unwrap_or_else(|| home.join(".kiro/sessions/cli"))
         }
@@ -194,8 +204,9 @@ pub fn resolve_paths(config: &AppConfig) -> (PathBuf, PathBuf, PathBuf) {
     } else {
         #[cfg(target_os = "windows")]
         {
-            detect_wsl_paths()
+            detected
                 .sqlite_db_path
+                .as_deref()
                 .map(PathBuf::from)
                 .unwrap_or_else(|| data.join("kiro-cli/data.sqlite3"))
         }

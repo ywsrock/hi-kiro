@@ -896,7 +896,17 @@ pub fn get_config() -> Result<crate::state::AppConfig, String> {
 
 #[tauri::command]
 pub fn save_config_cmd(config: crate::state::AppConfig) -> Result<(), String> {
-    crate::state::save_config(&config).map_err(|e| e.to_string())
+    // theme が None の場合は既存の値を保持する
+    let existing = crate::state::load_config();
+    let merged = crate::state::AppConfig {
+        sessions_dir: config.sessions_dir,
+        sqlite_db_path: config.sqlite_db_path,
+        theme: config
+            .theme
+            .or(existing.theme)
+            .or(Some("system".to_string())),
+    };
+    crate::state::save_config(&merged).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
