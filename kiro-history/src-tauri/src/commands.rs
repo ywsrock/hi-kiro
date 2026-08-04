@@ -198,6 +198,7 @@ pub fn copy_to_clipboard(text: String, app: AppHandle) -> Result<(), String> {
 pub fn resume_session(session_id: String, cwd: String) -> Result<(), String> {
     use std::process::Command;
 
+    #[allow(unused_variables)]
     let cwd_path = if cwd.is_empty() {
         dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
     } else {
