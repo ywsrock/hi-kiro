@@ -30,15 +30,25 @@ const AppContext = createContext<AppContextValue>({
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeView, setActiveViewRaw] = useState<View>("search");
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+  // ビューごとに独立した選択セッションを保持
+  const [selectedByView, setSelectedByView] = useState<Partial<Record<View, string | null>>>({});
+
   const [diffSessionIds, setDiffSessionIds] = useState<[string, string] | null>(null);
   const [indexing, setIndexing] = useState(true);
   const [indexProgress, setIndexProgress] = useState({ processed: 0, total: 0 });
 
-  // ビュー切り替え時に選択中セッションをリセット
+  // 現在のビューの selectedSessionId
+  const selectedSessionId = selectedByView[activeView] ?? null;
+
+  // 現在のビューにだけ保存
+  const setSelectedSessionId = useCallback((id: string | null) => {
+    setSelectedByView((prev) => ({ ...prev, [activeView]: id }));
+  }, [activeView]);
+
+  // ビュー切り替え（選択状態はビューごとに保持されるのでリセット不要）
   const setActiveView = useCallback((v: View) => {
     setActiveViewRaw(v);
-    setSelectedSessionId(null);
   }, []);
 
   return (
