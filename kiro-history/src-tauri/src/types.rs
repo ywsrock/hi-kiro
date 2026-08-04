@@ -164,18 +164,72 @@ pub struct StatsData {
 
 // ── Snippets ──────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CodeSnippet {
     pub language: String,
     pub code: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CodeSnippetWithSession {
     pub session_id: String,
     pub session_title: String,
     pub language: String,
     pub code: String,
+}
+
+// ── Saved Snippets ────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SavedSnippet {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub language: String,
+    pub code: String,
+    pub tags: Vec<String>,
+    pub starred: bool,
+    pub source_session_id: Option<String>,
+    pub source_cwd: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub use_count: i64,
+    pub last_used_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SaveSnippetParams {
+    pub title: String,
+    pub description: String,
+    pub language: String,
+    pub code: String,
+    pub tags: Vec<String>,
+    pub source_session_id: Option<String>,
+    pub source_cwd: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SnippetSearchParams {
+    pub query: String,
+    pub language: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub starred_only: Option<bool>,
+    pub sort_by: Option<String>,  // "recent" | "used" | "starred"
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SimilarSnippet {
+    pub snippet: SavedSnippet,
+    pub similarity: f32,  // 0.0-1.0
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SnippetStats {
+    pub total_saved: i64,
+    pub total_uses: i64,
+    pub by_language: Vec<(String, i64)>,
+    pub most_used: Vec<SavedSnippet>,
+    pub recently_added: Vec<SavedSnippet>,
 }
 
 // ── File refs ─────────────────────────────────────────────────────────────────

@@ -2,6 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   CodeSnippetWithSession,
   CreateTagParams,
+  SavedSnippet,
+  SaveSnippetParams,
+  SimilarSnippet,
+  SnippetSearchParams,
+  SnippetStats,
   DiffResult,
   ExportFormat,
   FileRef,
@@ -84,6 +89,34 @@ export const api = {
 
   renameSession: (sessionId: string, newTitle: string) =>
     invoke<void>("rename_session", { sessionId, newTitle }),
+
+  // ── Saved Snippets ───────────────────────────────────────────────────────
+  saveSnippet: (params: SaveSnippetParams) =>
+    invoke<SavedSnippet>("save_snippet", { params }),
+
+  updateSnippet: (id: string, title: string, description: string, language: string, code: string, tags: string[]) =>
+    invoke<void>("update_snippet", { id, title, description, language, code, tags }),
+
+  deleteSnippet: (id: string) =>
+    invoke<void>("delete_snippet", { id }),
+
+  toggleSnippetStar: (id: string) =>
+    invoke<boolean>("toggle_snippet_star", { id }),
+
+  incrementSnippetUse: (id: string) =>
+    invoke<void>("increment_snippet_use", { id }),
+
+  searchSavedSnippets: (searchParams: SnippetSearchParams) =>
+    invoke<SavedSnippet[]>("search_saved_snippets", { searchParams }),
+
+  findSimilarSnippets: (code: string, language: string, excludeId?: string) =>
+    invoke<SimilarSnippet[]>("find_similar_snippets", { code, language, excludeId }),
+
+  suggestSnippetTitle: (language: string, code: string) =>
+    invoke<string>("suggest_snippet_title", { language, code }),
+
+  getSnippetStats: () =>
+    invoke<SnippetStats>("get_snippet_stats"),
 
   // ── Tag Management ───────────────────────────────────────────────────────
   getTagMetadata: () => invoke<TagMeta[]>("get_tag_metadata"),

@@ -754,3 +754,96 @@ pub fn suggest_tags(session_id: String, state: State<'_, Mutex<AppState>>) -> Re
     let s = state.lock().map_err(|e| e.to_string())?;
     db::suggest_tags(&s.index_conn, &session_id).map_err(|e| e.to_string())
 }
+
+// ── Saved Snippets Commands ───────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn save_snippet(
+    params: crate::types::SaveSnippetParams,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<crate::types::SavedSnippet, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::save_snippet(&s.index_conn, &params).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_snippet(
+    id: String,
+    title: String,
+    description: String,
+    language: String,
+    code: String,
+    tags: Vec<String>,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::update_snippet(&s.index_conn, &id, &title, &description, &language, &code, &tags)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_snippet(
+    id: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::delete_snippet(&s.index_conn, &id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn toggle_snippet_star(
+    id: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<bool, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::toggle_snippet_star(&s.index_conn, &id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn increment_snippet_use(
+    id: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::increment_use_count(&s.index_conn, &id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn search_saved_snippets(
+    search_params: crate::types::SnippetSearchParams,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<crate::types::SavedSnippet>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::search_saved_snippets(&s.index_conn, &search_params)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn find_similar_snippets(
+    code: String,
+    language: String,
+    exclude_id: Option<String>,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<crate::types::SimilarSnippet>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::find_similar_snippets(
+        &s.index_conn,
+        &code,
+        &language,
+        exclude_id.as_deref(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn suggest_snippet_title(language: String, code: String) -> Result<String, String> {
+    Ok(crate::snippets::suggest_snippet_title(&language, &code))
+}
+
+#[tauri::command]
+pub fn get_snippet_stats(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<crate::types::SnippetStats, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::get_snippet_stats(&s.index_conn).map_err(|e| e.to_string())
+}

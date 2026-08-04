@@ -165,3 +165,52 @@ export interface DiffResult {
 }
 
 export type ExportFormat = "markdown" | "html" | "pdf";
+
+// ── Saved Snippets ────────────────────────────────────────────────────────────
+
+export interface SavedSnippet {
+  id: string;
+  title: string;
+  description: string;
+  language: string;
+  code: string;
+  tags: string[];
+  starred: boolean;
+  source_session_id?: string;
+  source_cwd: string;
+  created_at: number;
+  updated_at: number;
+  use_count: number;
+  last_used_at: number;
+}
+
+export interface SaveSnippetParams {
+  title: string;
+  description: string;
+  language: string;
+  code: string;
+  tags: string[];
+  source_session_id?: string;
+  source_cwd: string;
+}
+
+export interface SnippetSearchParams {
+  query: string;
+  language?: string;
+  tags?: string[];
+  starred_only?: boolean;
+  sort_by?: "recent" | "used" | "starred";
+}
+
+export interface SimilarSnippet {
+  snippet: SavedSnippet;
+  similarity: number;
+}
+
+export interface SnippetStats {
+  total_saved: number;
+  total_uses: number;
+  by_language: [string, number][];
+  most_used: SavedSnippet[];
+  recently_added: SavedSnippet[];
+}

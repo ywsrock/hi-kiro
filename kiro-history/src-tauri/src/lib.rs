@@ -4,6 +4,7 @@ mod index;
 mod models;
 mod operations;
 mod parser;
+mod snippets;
 mod state;
 mod types;
 
@@ -143,6 +144,15 @@ pub fn run() {
             commands::get_sessions_by_tag,
             commands::evaluate_smart_tag,
             commands::suggest_tags,
+            commands::save_snippet,
+            commands::update_snippet,
+            commands::delete_snippet,
+            commands::toggle_snippet_star,
+            commands::increment_snippet_use,
+            commands::search_saved_snippets,
+            commands::find_similar_snippets,
+            commands::suggest_snippet_title,
+            commands::get_snippet_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

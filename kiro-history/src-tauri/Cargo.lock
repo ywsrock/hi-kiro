@@ -1507,6 +1507,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tempfile",
  "tokio",
+ "uuid",
  "walkdir",
  "zip",
 ]

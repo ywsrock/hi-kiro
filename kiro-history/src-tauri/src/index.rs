@@ -90,6 +90,29 @@ fn init_schema(conn: &Connection) -> Result<()> {
             rule_type  TEXT NOT NULL,
             rule_value TEXT NOT NULL DEFAULT '{}'
         );
+
+        -- Saved snippets (persistent, user-curated code collection)
+        CREATE TABLE IF NOT EXISTS saved_snippets (
+            id                TEXT PRIMARY KEY,
+            title             TEXT NOT NULL DEFAULT '',
+            description       TEXT NOT NULL DEFAULT '',
+            language          TEXT NOT NULL DEFAULT 'text',
+            code              TEXT NOT NULL,
+            tags              TEXT NOT NULL DEFAULT '[]',
+            starred           INTEGER NOT NULL DEFAULT 0,
+            source_session_id TEXT,
+            source_cwd        TEXT NOT NULL DEFAULT '',
+            created_at        INTEGER NOT NULL,
+            updated_at        INTEGER NOT NULL,
+            use_count         INTEGER NOT NULL DEFAULT 0,
+            last_used_at      INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS saved_snippets_fts USING fts5(
+            id UNINDEXED, title, description, code, tags
+        );
+        CREATE INDEX IF NOT EXISTS idx_snippets_language ON saved_snippets(language);
+        CREATE INDEX IF NOT EXISTS idx_snippets_starred  ON saved_snippets(starred) WHERE starred = 1;
+        CREATE INDEX IF NOT EXISTS idx_snippets_updated  ON saved_snippets(updated_at DESC);
     ")?;
     Ok(())
 }
