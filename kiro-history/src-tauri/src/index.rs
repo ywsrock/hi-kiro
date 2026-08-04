@@ -129,9 +129,19 @@ pub fn rebuild_index(
     let jsonl_count = jsonl_sessions.len() as u32;
 
     // Count SQLite sessions quickly (no full parse)
+    // Windows UNCパス対応: 一時ファイルにコピーしてから開く
     let sqlite_count: u32 = if sqlite_db_path.exists() {
+        #[cfg(target_os = "windows")]
+        let sqlite_open_path = {
+            let tmp = std::env::temp_dir().join("hi-kiro-sqlite-count-tmp.db");
+            std::fs::copy(sqlite_db_path, &tmp).ok();
+            tmp
+        };
+        #[cfg(not(target_os = "windows"))]
+        let sqlite_open_path = sqlite_db_path.to_path_buf();
+
         if let Ok(c) = rusqlite::Connection::open_with_flags(
-            sqlite_db_path,
+            &sqlite_open_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
         ) {
             let v1: i64 = c

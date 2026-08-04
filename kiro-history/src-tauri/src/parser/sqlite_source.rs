@@ -29,9 +29,26 @@ pub fn stream_all<F>(db_path: &Path, mut callback: F) -> usize
 where
     F: FnMut(SessionMeta),
 {
-    let conn = match Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
-        Ok(c) => c,
-        Err(_) => return 0,
+    // Windows の UNC パス (\wsl$\...) は SQLite が直接開けない場合があるため
+    // 一時ファイルにコピーしてから開く
+    #[cfg(target_os = "windows")]
+    let (conn, _tmp) = {
+        use std::io;
+        let tmp = std::env::temp_dir().join("hi-kiro-sqlite-tmp.db");
+        if std::fs::copy(db_path, &tmp).is_err() {
+            return 0;
+        }
+        match Connection::open_with_flags(&tmp, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+            Ok(c) => (c, Some(tmp)),
+            Err(_) => return 0,
+        }
+    };
+    #[cfg(not(target_os = "windows"))]
+    let (conn, _tmp) = {
+        match Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+            Ok(c) => (c, None::<std::path::PathBuf>),
+            Err(_) => return 0,
+        }
     };
 
     // Optimize SQLite for large sequential reads
