@@ -195,7 +195,13 @@ pub fn rebuild_index(
                 source: meta.source.clone(),
             };
             let full_text = format!("{} {}", meta.title, meta.cwd);
-            if let Err(e) = upsert_session_with_text(conn, &session, &full_text) {
+            // meta.message_count を使って message_count=0 リグレッションを防ぐ
+            if let Err(e) = upsert_session_with_text_and_count(
+                conn,
+                &session,
+                &full_text,
+                meta.message_count as i64,
+            ) {
                 warn!("Failed to index JSONL session {}: {}", session.id, e);
             }
         }
@@ -286,6 +292,16 @@ pub fn upsert_session_with_text(
     session: &Session,
     full_text: &str,
 ) -> Result<()> {
+    upsert_session_with_text_and_count(conn, session, full_text, session.messages.len() as i64)
+}
+
+/// message_count を外から指定できるバージョン（stream_meta 経由のストリーミング用）
+pub fn upsert_session_with_text_and_count(
+    conn: &Connection,
+    session: &Session,
+    full_text: &str,
+    message_count: i64,
+) -> Result<()> {
     let existing: Option<i64> = conn
         .query_row(
             "SELECT updated_at FROM sessions_meta WHERE session_id = ?1",
@@ -315,7 +331,7 @@ pub fn upsert_session_with_text(
             session.cwd,
             session.created_at,
             session.updated_at,
-            session.messages.len() as i64,
+            message_count,
             session.source.to_string(),
             session.model_name,
             session.max_context_pct,

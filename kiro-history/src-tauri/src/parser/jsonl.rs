@@ -91,12 +91,25 @@ where
 }
 
 /// .jsonファイルからメタデータのみ抽出（メッセージ本文なし）
+/// parse_jsonl_pair() と同等のメタデータを返すが messages は読まない
 fn extract_meta_from_json(
     json_path: &std::path::Path,
     session_id: &str,
 ) -> anyhow::Result<crate::parser::sqlite_source::SessionMeta> {
     let json_str = std::fs::read_to_string(json_path)?;
     let meta: serde_json::Value = serde_json::from_str(&json_str)?;
+    // extract_session_meta で model_name/max_context_pct/tool_uses 等を復元
+    let (model_name, max_context_pct, total_tool_uses, total_cycles, total_duration_secs) =
+        extract_session_meta(&meta);
+    // .jsonlの行数からmessage_countを推定（本文不読）
+    let jsonl_path = json_path.with_extension("jsonl");
+    let message_count = if jsonl_path.exists() {
+        std::fs::read_to_string(&jsonl_path)
+            .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count())
+            .unwrap_or(0)
+    } else {
+        0
+    };
     Ok(crate::parser::sqlite_source::SessionMeta {
         id: session_id.to_string(),
         title: meta["title"].as_str().unwrap_or("Untitled").to_string(),
@@ -104,13 +117,13 @@ fn extract_meta_from_json(
         created_at: parse_rfc3339_to_ms(meta["created_at"].as_str().unwrap_or("")),
         updated_at: parse_rfc3339_to_ms(meta["updated_at"].as_str().unwrap_or("")),
         source: crate::models::SessionSource::Jsonl,
-        model_name: meta["model_name"].as_str().map(|s| s.to_string()),
-        max_context_pct: None,
-        total_tool_uses: 0,
-        total_cycles: 0,
-        total_duration_secs: 0,
+        model_name,
+        max_context_pct,
+        total_tool_uses,
+        total_cycles,
+        total_duration_secs,
         first_user_message: String::new(),
-        message_count: 0,
+        message_count,
     })
 }
 
