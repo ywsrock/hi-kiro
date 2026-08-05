@@ -816,7 +816,7 @@ pub fn get_sessions_by_tag(
     mode: &str,
 ) -> Result<Vec<SessionSummary>> {
     if tags.is_empty() {
-        // Return untagged sessions
+        // タグなしセッションを返す
         let mut stmt = conn.prepare(
             "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
                     m.message_count, m.source, m.model_name, m.max_context_pct,
@@ -831,31 +831,50 @@ pub fn get_sessions_by_tag(
         return Ok(rows.flatten().collect());
     }
 
-    // Load all, then filter by AND/OR logic
-    let mut stmt = conn.prepare(
-        "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
-                m.message_count, m.source, m.model_name, m.max_context_pct,
-                m.total_tool_uses, m.total_cycles, m.total_duration_secs,
-                COALESCE(u.starred,0), COALESCE(u.tags,'[]')
-         FROM sessions_meta m
-         LEFT JOIN user_data u ON m.session_id = u.session_id
-         ORDER BY m.updated_at DESC LIMIT 500",
-    )?;
-    let rows = stmt.query_map([], row_to_summary)?;
-    let all: Vec<SessionSummary> = rows.flatten().collect();
+    // json_each でSQL側でフィルタ（全件取得→Rustフィルタより高速）
+    let base = "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+                    m.message_count, m.source, m.model_name, m.max_context_pct,
+                    m.total_tool_uses, m.total_cycles, m.total_duration_secs,
+                    COALESCE(u.starred,0), COALESCE(u.tags,'[]')
+             FROM sessions_meta m
+             LEFT JOIN user_data u ON m.session_id = u.session_id";
 
-    let filtered = all
-        .into_iter()
-        .filter(|s| {
-            if mode == "AND" {
-                tags.iter().all(|t| s.tags.contains(t))
-            } else {
-                tags.iter().any(|t| s.tags.contains(t))
-            }
-        })
-        .collect();
+    let sql = if mode == "AND" {
+        // AND: 全タグを持つセッション（各タグのEXISTSをAND連結）
+        let exists_clauses: Vec<String> = (0..tags.len())
+            .map(|i| {
+                format!(
+                    "EXISTS (SELECT 1 FROM json_each(COALESCE(u.tags,'[]')) WHERE value = ?{})",
+                    i + 1
+                )
+            })
+            .collect();
+        format!(
+            "{} WHERE {} ORDER BY m.updated_at DESC LIMIT 500",
+            base,
+            exists_clauses.join(" AND ")
+        )
+    } else {
+        // OR: いずれかのタグを持つセッション
+        let exists_clauses: Vec<String> = (0..tags.len())
+            .map(|i| {
+                format!(
+                    "EXISTS (SELECT 1 FROM json_each(COALESCE(u.tags,'[]')) WHERE value = ?{})",
+                    i + 1
+                )
+            })
+            .collect();
+        format!(
+            "{} WHERE {} ORDER BY m.updated_at DESC LIMIT 500",
+            base,
+            exists_clauses.join(" OR ")
+        )
+    };
 
-    Ok(filtered)
+    let mut stmt = conn.prepare(&sql)?;
+    let refs: Vec<&dyn rusqlite::ToSql> = tags.iter().map(|t| t as &dyn rusqlite::ToSql).collect();
+    let rows = stmt.query_map(refs.as_slice(), row_to_summary)?;
+    Ok(rows.flatten().collect())
 }
 
 pub fn evaluate_smart_tag(

@@ -361,7 +361,7 @@ export function TagsView() {
       {/* ── Main Content ──────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
         {/* Session list column */}
-        <div className="flex flex-col flex-shrink-0 overflow-hidden" style={{ width: "300px", borderRight: "1px solid var(--border)" }}>
+        <div className="flex flex-col flex-shrink-0 overflow-hidden" style={{ width: "300px", borderRight: "1px solid var(--border)", minHeight: 0 }}>
           {/* Header */}
           <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="flex items-center gap-1.5 flex-1 flex-wrap">
