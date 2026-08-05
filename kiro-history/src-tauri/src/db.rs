@@ -633,17 +633,19 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
 
 /// Return (input_price_per_mtok, output_price_per_mtok, context_window) for a model.
 /// モデル価格テーブル（入力$/1M tokens, 出力$/1M tokens, コンテキストウィンドウ）
-/// 最終更新: 2025-08 (Anthropic公式価格に基づく)
-/// 価格改定時はこの関数を更新してください
-/// 参考: https://www.anthropic.com/pricing
+/// 価格定数は constants.rs で管理しています。価格改定時は constants.rs を更新してください。
 fn model_pricing(model: &str) -> (f64, f64, u64) {
+    use crate::constants::{
+        CTX_HAIKU, CTX_OPUS, CTX_SONNET, PRICE_HAIKU_INPUT, PRICE_HAIKU_OUTPUT, PRICE_OPUS_INPUT,
+        PRICE_OPUS_OUTPUT, PRICE_SONNET_INPUT, PRICE_SONNET_OUTPUT,
+    };
     let m = model.to_lowercase();
     if m.contains("opus") {
-        (15.0, 75.0, 200_000) // Claude 3 Opus
+        (PRICE_OPUS_INPUT, PRICE_OPUS_OUTPUT, CTX_OPUS)
     } else if m.contains("haiku") {
-        (0.8, 4.0, 200_000) // Claude 3 Haiku
+        (PRICE_HAIKU_INPUT, PRICE_HAIKU_OUTPUT, CTX_HAIKU)
     } else {
-        (3.0, 15.0, 200_000) // Claude 3 Sonnet (default)
+        (PRICE_SONNET_INPUT, PRICE_SONNET_OUTPUT, CTX_SONNET) // Sonnet as default
     }
 }
 

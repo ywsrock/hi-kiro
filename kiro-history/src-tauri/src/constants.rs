@@ -51,3 +51,30 @@ pub const LOG_MAX_FILE_SIZE: u128 = 10 * 1024 * 1024; // 10MB
 
 /// 保持するログファイルの最大数
 pub const LOG_MAX_FILES: usize = 5;
+
+// ── モデル価格表 ──────────────────────────────────────────────────────────────
+// 最終更新: 2025-08 (Anthropic公式価格に基づく)
+// 価格改定時はこのセクションを更新してください
+// 参考: https://www.anthropic.com/pricing
+// 単位: $/1M tokens
+
+/// Claude 3 Opus: 入力単価 $/1M tokens
+pub const PRICE_OPUS_INPUT: f64 = 15.0;
+/// Claude 3 Opus: 出力単価 $/1M tokens
+pub const PRICE_OPUS_OUTPUT: f64 = 75.0;
+/// Claude 3 Opus: コンテキストウィンドウ
+pub const CTX_OPUS: u64 = 200_000;
+
+/// Claude 3 Haiku: 入力単価 $/1M tokens
+pub const PRICE_HAIKU_INPUT: f64 = 0.8;
+/// Claude 3 Haiku: 出力単価 $/1M tokens
+pub const PRICE_HAIKU_OUTPUT: f64 = 4.0;
+/// Claude 3 Haiku: コンテキストウィンドウ
+pub const CTX_HAIKU: u64 = 200_000;
+
+/// Claude 3 Sonnet (デフォルト): 入力単価 $/1M tokens
+pub const PRICE_SONNET_INPUT: f64 = 3.0;
+/// Claude 3 Sonnet (デフォルト): 出力単価 $/1M tokens
+pub const PRICE_SONNET_OUTPUT: f64 = 15.0;
+/// Claude 3 Sonnet: コンテキストウィンドウ
+pub const CTX_SONNET: u64 = 200_000;
