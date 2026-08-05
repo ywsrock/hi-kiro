@@ -42,3 +42,31 @@ describe("api.getTagMetadata", () => {
     expect(result).toEqual([]);
   });
 });
+
+describe("api.searchSessionsCursor", () => {
+  it("invokes search_sessions_cursor with correct params (initial load)", async () => {
+    mockInvoke.mockResolvedValueOnce([]);
+    await api.searchSessionsCursor({ query: "rust", limit: 100 });
+    expect(mockInvoke).toHaveBeenCalledWith("search_sessions_cursor", {
+      params: { query: "rust", limit: 100 },
+    });
+  });
+
+  it("invokes search_sessions_cursor with cursor params (loadMore)", async () => {
+    mockInvoke.mockResolvedValueOnce([]);
+    await api.searchSessionsCursor({
+      query: "",
+      limit: 100,
+      cursor_updated_at: 1700000000,
+      cursor_session_id: "abc-123",
+    });
+    expect(mockInvoke).toHaveBeenCalledWith("search_sessions_cursor", {
+      params: {
+        query: "",
+        limit: 100,
+        cursor_updated_at: 1700000000,
+        cursor_session_id: "abc-123",
+      },
+    });
+  });
+});

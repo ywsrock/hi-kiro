@@ -128,6 +128,112 @@ fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSummary> {
     })
 }
 
+/// カーソルベースページネーション版 search_sessions
+/// cursor_updated_at: このupdated_at より古いセッションを取得（None=先頭から）
+/// cursor_session_id: タイブレーク用のsession_id（None=先頭から）
+pub fn search_sessions_cursor(
+    conn: &Connection,
+    query: &str,
+    limit: u32,
+    filters: &FilterParams,
+    cursor_updated_at: Option<i64>,
+    cursor_session_id: Option<&str>,
+) -> Result<Vec<SessionSummary>> {
+    // 通常のsearch_sessionsと同じ条件構築 + カーソル条件を追加
+    let mut conditions: Vec<String> = Vec::new();
+    let mut bind_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+    let use_fts = !query.trim().is_empty();
+    if use_fts {
+        conditions.push(
+            "m.session_id IN (SELECT session_id FROM sessions_fts WHERE sessions_fts MATCH ?1)"
+                .to_string(),
+        );
+        let fts_query = query
+            .split_whitespace()
+            .filter(|w| !w.is_empty())
+            .map(|w| format!("\"{}\"*", w.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let fts_query = if fts_query.is_empty() {
+            format!("\"{}\"*", query.replace('"', "\"\""))
+        } else {
+            fts_query
+        };
+        bind_values.push(Box::new(fts_query));
+    }
+    if let Some(from) = filters.date_from {
+        let idx = bind_values.len() + 1;
+        conditions.push(format!("m.updated_at >= ?{}", idx));
+        bind_values.push(Box::new(from));
+    }
+    if let Some(to) = filters.date_to {
+        let idx = bind_values.len() + 1;
+        conditions.push(format!("m.updated_at <= ?{}", idx));
+        bind_values.push(Box::new(to));
+    }
+    if let Some(ref model) = filters.model_name {
+        let idx = bind_values.len() + 1;
+        conditions.push(format!("m.model_name = ?{}", idx));
+        bind_values.push(Box::new(model.clone()));
+    }
+    if filters.starred_only.unwrap_or(false) {
+        conditions.push("u.starred = 1".to_string());
+    }
+    if let Some(ref tag_filter) = filters.tags {
+        for tag in tag_filter.iter().filter(|t| !t.is_empty()) {
+            let idx = bind_values.len() + 1;
+            conditions.push(format!(
+                "EXISTS (SELECT 1 FROM json_each(COALESCE(u.tags, '[]')) WHERE value = ?{})",
+                idx
+            ));
+            bind_values.push(Box::new(tag.clone()));
+        }
+    }
+    // 複合カーソル条件: (updated_at, session_id) で安定ページネーション
+    // 同一updated_atを持つ行の取りこぼし/重複を防ぐ
+    if let Some(cursor_at) = cursor_updated_at {
+        let idx_at = bind_values.len() + 1;
+        let idx_id = bind_values.len() + 2;
+        if let Some(cursor_id) = cursor_session_id {
+            // updated_atが同じ行はsession_idで降順タイブレーク
+            conditions.push(format!(
+                "(m.updated_at < ?{} OR (m.updated_at = ?{} AND m.session_id < ?{}))",
+                idx_at, idx_at, idx_id
+            ));
+            bind_values.push(Box::new(cursor_at));
+            bind_values.push(Box::new(cursor_at));
+            bind_values.push(Box::new(cursor_id.to_string()));
+        } else {
+            conditions.push(format!("m.updated_at < ?{}", idx_at));
+            bind_values.push(Box::new(cursor_at));
+        }
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+
+    let sql = format!(
+        "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+                m.message_count, m.source, m.model_name, m.max_context_pct,
+                m.total_tool_uses, m.total_cycles, m.total_duration_secs,
+                COALESCE(u.starred, 0), COALESCE(u.tags, '[]')
+         FROM sessions_meta m
+         LEFT JOIN user_data u ON m.session_id = u.session_id
+         {where_clause}
+         ORDER BY m.updated_at DESC, m.session_id DESC
+         LIMIT {limit}",
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let refs: Vec<&dyn rusqlite::ToSql> = bind_values.iter().map(|b| b.as_ref()).collect();
+    let rows = stmt.query_map(refs.as_slice(), row_to_summary)?;
+    Ok(rows.flatten().collect())
+}
+
 // ── Related sessions ──────────────────────────────────────────────────────────
 
 pub fn get_related_sessions(

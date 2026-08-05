@@ -6,6 +6,8 @@ import type { SessionSummary } from "../../types";
 import { api } from "../../api";
 
 interface SessionListProps {
+  onLoadMore?: () => void;   // スクロール末尾でさらに読み込む
+  loadingMore?: boolean;     // 追加読み込み中フラグ
   sessions: SessionSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -181,6 +183,8 @@ export function SessionList({
   onDeleteMultiple,
   onRename,
   loading,
+  onLoadMore,
+  loadingMore,
 }: SessionListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [selectMode, setSelectMode] = useState(false);
@@ -213,6 +217,9 @@ export function SessionList({
     },
     [onDeleteMultiple]
   );
+
+  // loadMore 重複発火防止: stateの非同期更新に依存しない即時ロック
+  const loadMoreInFlight = useRef(false);
 
   // ホバー時プリフェッチ（デバウンス付き、150ms後に先読み開始）
   const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -342,7 +349,25 @@ export function SessionList({
       </div>
 
       {/* List */}
-      <div ref={parentRef} className="flex-1 overflow-auto">
+      <div
+        ref={parentRef}
+        className="flex-1 overflow-auto"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          // 末尾200px以内でloadMore発火（refで即時ロックして重複防止）
+          if (
+            onLoadMore &&
+            !loadingMore &&
+            !loadMoreInFlight.current &&
+            el.scrollHeight - el.scrollTop - el.clientHeight < 200
+          ) {
+            loadMoreInFlight.current = true;
+            Promise.resolve(onLoadMore()).finally(() => {
+              loadMoreInFlight.current = false;
+            });
+          }
+        }}
+      >
         <div
           style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}
         >
@@ -488,6 +513,11 @@ export function SessionList({
           })}
         </div>
       </div>
+      {loadingMore && (
+        <div className="flex justify-center py-2 flex-shrink-0">
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>読み込み中...</span>
+        </div>
+      )}
     </div>
   );
 }
