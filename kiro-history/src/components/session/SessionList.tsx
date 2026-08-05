@@ -219,6 +219,7 @@ export function SessionList({
   const handleHover = useCallback((sessionId: string) => {
     if (prefetchTimer.current) clearTimeout(prefetchTimer.current);
     prefetchTimer.current = setTimeout(() => {
+      prefetchTimer.current = null; // 発火済みのタイマーIDをクリア
       api.prefetchSession(sessionId).catch(() => {}); // エラーは無視（あくまで高速化のため）
     }, 150);
   }, []);

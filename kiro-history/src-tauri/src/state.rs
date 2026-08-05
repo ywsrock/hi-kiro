@@ -3,6 +3,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppConfig {
@@ -33,7 +34,7 @@ pub struct AppState {
     #[allow(dead_code)]
     pub config: AppConfig,
     /// 直近開いたセッションのメモリキャッシュ (LRU, 最大50件)
-    pub session_cache: LruCache<String, crate::models::Session>,
+    pub session_cache: LruCache<String, Arc<crate::models::Session>>,
 }
 
 impl AppState {

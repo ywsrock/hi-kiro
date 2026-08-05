@@ -124,15 +124,13 @@ function CopyDropdown({ content }: { content: string }) {
 function VirtualMessageList({
   messages,
   scrollRef,
-  onScrollReset,
 }: {
   messages: Array<{ role: string; content: string }>;
-  scrollRef: React.RefObject<HTMLDivElement>;
-  onScrollReset?: () => void;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const virtualizer = useVirtualizer({
     count: messages.length,
-    getScrollElement: () => scrollRef.current,
+    getScrollElement: () => scrollRef.current as HTMLDivElement | null,
     estimateSize: useCallback((i: number) => {
       const len = messages[i]?.content?.length ?? 0;
       return Math.max(80, Math.min(800, 80 + Math.floor(len / 80) * 20));
@@ -144,7 +142,7 @@ function VirtualMessageList({
 
   return (
     <div
-      ref={scrollRef}
+      ref={scrollRef as React.RefObject<HTMLDivElement>}
       className="flex-1 overflow-auto px-4 py-4"
     >
       {messages.length === 0 ? (
@@ -492,7 +490,7 @@ export function PreviewPane({ sessionId, onSelectSession }: PreviewPaneProps) {
   const [tags, setTags] = useState<string[]>([]);
   const [showRelated, setShowRelated] = useState(false);
   const [viewMode, setViewMode] = useState<"all" | "user" | "kiro">("all");
-  const scrollRef = useRef<HTMLDivElement>(null!);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!sessionId) {
