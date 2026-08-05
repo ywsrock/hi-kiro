@@ -564,7 +564,8 @@ pub fn rename_session(
 #[tauri::command]
 pub fn get_stats(state: State<'_, Mutex<AppState>>) -> Result<StatsData, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    db::get_stats(&state.index_conn).map_err(|e| e.to_string())
+    let prices = state.model_prices.read().map_err(|e| e.to_string())?;
+    db::get_stats(&state.index_conn, &prices).map_err(|e| e.to_string())
 }
 
 // ── Snippets ──────────────────────────────────────────────────────────────────
@@ -1015,13 +1016,26 @@ pub fn get_model_prices() -> Result<crate::model_prices::ModelPricesConfig, Stri
     Ok(crate::model_prices::load())
 }
 
-/// モデル価格設定をリロード（再起動不要で反映）
+/// モデル価格設定をリロード（再起動不要でAppStateのキャッシュを更新）
 #[tauri::command]
-pub fn reload_model_prices() -> Result<String, String> {
-    let config = crate::model_prices::load();
-    Ok(format!(
+pub fn reload_model_prices(state: State<'_, Mutex<AppState>>) -> Result<String, String> {
+    // ファイルを一度だけ読み込み・パース（失敗はエラーで返す）
+    let path = crate::model_prices::config_path();
+    let config = if path.exists() {
+        let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str::<crate::model_prices::ModelPricesConfig>(&json)
+            .map_err(|e| format!("model_prices.json のパースエラー: {}", e))?
+    } else {
+        crate::model_prices::ModelPricesConfig::default()
+    };
+    // バリデーション済みの config を直接キャッシュ更新（二重I/O・レース回避）
+    let msg = format!(
         "価格設定を再読み込みしました（{}、{}モデル定義）",
         config.last_updated,
         config.models.len()
-    ))
+    );
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let mut prices = state.model_prices.write().map_err(|e| e.to_string())?;
+    *prices = config;
+    Ok(msg)
 }

@@ -1,6 +1,7 @@
 //! モデル価格設定の読み込みと管理
 //!
-//! 価格は `~/.local/share/hi-kiro/model_prices.json` から読み込みます。
+//! 価格は `dirs::data_dir()/hi-kiro/model_prices.json` から読み込みます。
+//! OS別パス例: `Linux: ~/.local/share/hi-kiro/` / `Windows: %APPDATA%\hi-kiro\` / `macOS: ~/Library/Application Support/hi-kiro/`
 //! ファイルが存在しない場合はデフォルト値（constants.rs）を使用します。
 //! 価格改定時はアプリを再ビルドせずにJSONファイルを編集するだけで反映されます。
 
@@ -125,16 +126,31 @@ pub fn load() -> ModelPricesConfig {
 }
 
 /// 設定ファイルが存在しない場合はデフォルト値を書き出す
+/// 失敗時は warn ログを出力する
 pub fn ensure_default_exists() {
     let path = config_path();
     if !path.exists() {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).ok();
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                log::warn!(
+                    "model_prices.json の親ディレクトリ作成失敗: {}: {}",
+                    parent.display(),
+                    e
+                );
+                return;
+            }
         }
         let default = ModelPricesConfig::default();
-        if let Ok(json) = serde_json::to_string_pretty(&default) {
-            std::fs::write(&path, json).ok();
-            log::info!("model_prices.json を作成しました: {}", path.display());
+        match serde_json::to_string_pretty(&default) {
+            Ok(json) => match std::fs::write(&path, json) {
+                Ok(()) => log::info!("model_prices.json を作成しました: {}", path.display()),
+                Err(e) => log::warn!(
+                    "model_prices.json の書き込み失敗: {}: {}",
+                    path.display(),
+                    e
+                ),
+            },
+            Err(e) => log::warn!("model_prices.json のシリアライズ失敗: {}", e),
         }
     }
 }
@@ -143,7 +159,7 @@ pub fn ensure_default_exists() {
 pub fn get_price(config: &ModelPricesConfig, model: &str) -> (f64, f64, u64) {
     let m = model.to_lowercase();
     for entry in &config.models {
-        if m.contains(&entry.pattern) {
+        if m.contains(&entry.pattern.to_lowercase()) {
             return (entry.input, entry.output, entry.ctx);
         }
     }

@@ -33,7 +33,9 @@ export function SettingsView() {
     setIsWindows(navigator.userAgent.includes("Windows") || navigator.platform.includes("Win"));
 
     // 現在の設定を読み込み
-    api.getModelPricesPath().then(setPricesPath).catch(console.error);
+    api.getModelPricesPath()
+      .then(setPricesPath)
+      .catch((e) => { console.error("getModelPricesPath failed:", e); setPricesPath("(パスの取得に失敗しました)"); });
     api.getModelPrices().then((cfg) => {
       setModelPrices(cfg.models);
       setPricesUpdated(cfg.last_updated);
@@ -56,7 +58,7 @@ export function SettingsView() {
       setStats(s);
       toast.success("インデックスを再構築しました");
     } catch (e) {
-      toast.error(`エラー: ${e}`);
+      toast.error(`エラー: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setRebuilding(false);
     }
@@ -292,7 +294,7 @@ export function SettingsView() {
                 setPricesUpdated(cfg.last_updated);
                 toast.success(msg);
               } catch (e) {
-                toast.error(`エラー: ${e}`);
+                toast.error(`エラー: ${e instanceof Error ? e.message : String(e)}`);
               } finally {
                 setReloading(false);
               }
