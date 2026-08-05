@@ -31,6 +31,8 @@ regex = "1"
 uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1", features = ["full"] }
 tauri-plugin-process = "2"
+tauri-plugin-log = { version = "2", features = ["colored"] }
+log = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

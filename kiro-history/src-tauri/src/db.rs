@@ -1,3 +1,4 @@
+use crate::constants::{TAG_NAME_MAX_LEN, TAG_NAME_MIN_LEN};
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use std::cmp::Reverse;
@@ -116,7 +117,12 @@ fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSummary> {
         max_context_pct: row.get(8)?,
         total_tool_uses: row.get(9)?,
         total_cycles: row.get(10)?,
-        total_duration_secs: row.get(11)?,
+        // NULLの場合のみ0、型不整合等の想定外エラーは?で伝播させる
+        total_duration_secs: row
+            .get::<_, Option<f64>>(11)?
+            .map(|v| v as i64)
+            .or_else(|| row.get::<_, Option<i64>>(11).ok().flatten())
+            .unwrap_or(0),
         starred: row.get::<_, i32>(12)? != 0,
         tags,
     })
@@ -614,7 +620,7 @@ pub fn get_tag_metadata(conn: &Connection) -> Result<Vec<crate::types::TagMeta>>
 pub fn create_tag(conn: &Connection, params: &crate::types::CreateTagParams) -> Result<()> {
     let tag = params.tag.trim().trim_start_matches('#').to_string();
     let tag = format!("#{}", tag);
-    if tag.len() < 2 || tag.len() > 30 {
+    if tag.len() < TAG_NAME_MIN_LEN + 1 || tag.len() > TAG_NAME_MAX_LEN + 1 {
         return Err(anyhow::anyhow!("タグ名は1〜29文字で入力してください"));
     }
     let now = chrono::Utc::now().timestamp_millis();
@@ -811,7 +817,7 @@ pub fn get_sessions_by_tag(
     mode: &str,
 ) -> Result<Vec<SessionSummary>> {
     if tags.is_empty() {
-        // Return untagged sessions
+        // タグなしセッションを返す
         let mut stmt = conn.prepare(
             "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
                     m.message_count, m.source, m.model_name, m.max_context_pct,
@@ -826,31 +832,50 @@ pub fn get_sessions_by_tag(
         return Ok(rows.flatten().collect());
     }
 
-    // Load all, then filter by AND/OR logic
-    let mut stmt = conn.prepare(
-        "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
-                m.message_count, m.source, m.model_name, m.max_context_pct,
-                m.total_tool_uses, m.total_cycles, m.total_duration_secs,
-                COALESCE(u.starred,0), COALESCE(u.tags,'[]')
-         FROM sessions_meta m
-         LEFT JOIN user_data u ON m.session_id = u.session_id
-         ORDER BY m.updated_at DESC LIMIT 500",
-    )?;
-    let rows = stmt.query_map([], row_to_summary)?;
-    let all: Vec<SessionSummary> = rows.flatten().collect();
+    // json_each でSQL側でフィルタ（全件取得→Rustフィルタより高速）
+    let base = "SELECT m.session_id, m.title, m.cwd, m.created_at, m.updated_at,
+                    m.message_count, m.source, m.model_name, m.max_context_pct,
+                    m.total_tool_uses, m.total_cycles, m.total_duration_secs,
+                    COALESCE(u.starred,0), COALESCE(u.tags,'[]')
+             FROM sessions_meta m
+             LEFT JOIN user_data u ON m.session_id = u.session_id";
 
-    let filtered = all
-        .into_iter()
-        .filter(|s| {
-            if mode == "AND" {
-                tags.iter().all(|t| s.tags.contains(t))
-            } else {
-                tags.iter().any(|t| s.tags.contains(t))
-            }
-        })
-        .collect();
+    let sql = if mode == "AND" {
+        // AND: 全タグを持つセッション（各タグのEXISTSをAND連結）
+        let exists_clauses: Vec<String> = (0..tags.len())
+            .map(|i| {
+                format!(
+                    "EXISTS (SELECT 1 FROM json_each(COALESCE(u.tags,'[]')) WHERE value = ?{})",
+                    i + 1
+                )
+            })
+            .collect();
+        format!(
+            "{} WHERE {} ORDER BY m.updated_at DESC LIMIT 500",
+            base,
+            exists_clauses.join(" AND ")
+        )
+    } else {
+        // OR: いずれかのタグを持つセッション
+        let exists_clauses: Vec<String> = (0..tags.len())
+            .map(|i| {
+                format!(
+                    "EXISTS (SELECT 1 FROM json_each(COALESCE(u.tags,'[]')) WHERE value = ?{})",
+                    i + 1
+                )
+            })
+            .collect();
+        format!(
+            "{} WHERE {} ORDER BY m.updated_at DESC LIMIT 500",
+            base,
+            exists_clauses.join(" OR ")
+        )
+    };
 
-    Ok(filtered)
+    let mut stmt = conn.prepare(&sql)?;
+    let refs: Vec<&dyn rusqlite::ToSql> = tags.iter().map(|t| t as &dyn rusqlite::ToSql).collect();
+    let rows = stmt.query_map(refs.as_slice(), row_to_summary)?;
+    Ok(rows.flatten().collect())
 }
 
 pub fn evaluate_smart_tag(
@@ -1155,4 +1180,184 @@ pub fn suggest_tags(conn: &Connection, session_id: &str) -> Result<Vec<String>> 
     suggestions.retain(|t| !current_tags.contains(t));
     suggestions.dedup();
     Ok(suggestions.into_iter().take(6).collect())
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    #[test]
+    fn test_json1_available() {
+        let conn = Connection::open_in_memory().unwrap();
+        let result: i64 = conn
+            .query_row(
+                r#"SELECT COUNT(*) FROM json_each('["a","b"]') WHERE value = 'a'"#,
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(-1);
+        assert_eq!(result, 1, "json_each should work with bundled SQLite");
+    }
+    fn setup_test_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions_meta (
+                session_id TEXT PRIMARY KEY, title TEXT, cwd TEXT,
+                created_at INTEGER, updated_at INTEGER, message_count INTEGER,
+                source TEXT, model_name TEXT, max_context_pct REAL,
+                total_tool_uses INTEGER, total_cycles INTEGER, total_duration_secs REAL
+            );
+            CREATE VIRTUAL TABLE sessions_fts USING fts5(
+                session_id UNINDEXED, title, cwd, full_text
+            );
+            CREATE TABLE user_data (
+                session_id TEXT PRIMARY KEY, starred INTEGER DEFAULT 0, tags TEXT DEFAULT '[]'
+            );
+            CREATE TABLE tag_metadata (
+                tag TEXT PRIMARY KEY, color TEXT DEFAULT '#334155',
+                description TEXT DEFAULT '', sort_order INTEGER DEFAULT 0,
+                created_at INTEGER DEFAULT 0, is_smart INTEGER DEFAULT 0
+            );
+            CREATE TABLE smart_tag_rules (
+                tag TEXT PRIMARY KEY, rule_type TEXT, rule_value TEXT
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn insert_session(conn: &Connection, id: &str, title: &str, tags: &[&str]) {
+        let now = 1_700_000_000i64;
+        let duration: f64 = 0.0; // total_duration_secs must be REAL
+        conn.execute(
+            "INSERT INTO sessions_meta (session_id,title,cwd,created_at,updated_at,             message_count,source,model_name,max_context_pct,total_tool_uses,total_cycles,             total_duration_secs) VALUES (?1,?2,'/',?3,?3,1,'jsonl',NULL,NULL,0,0,?4)",
+            rusqlite::params![id, title, now, duration],
+        )
+        .unwrap();
+        let tags_json = serde_json::to_string(tags).unwrap();
+        conn.execute(
+            "INSERT INTO user_data VALUES (?1, 0, ?2)",
+            rusqlite::params![id, tags_json],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO sessions_fts(session_id,title,cwd,full_text) VALUES (?1,?2,'/',?2)",
+            rusqlite::params![id, title],
+        )
+        .unwrap();
+    }
+    #[test]
+    fn test_search_basic() {
+        let conn = setup_test_db();
+        insert_session(&conn, "id1", "Rust tutorial", &[]);
+        insert_session(&conn, "id2", "Python guide", &[]);
+
+        // 空クエリは全件返す
+        let all = search_sessions(&conn, "", 10, &Default::default()).unwrap();
+        assert_eq!(all.len(), 2);
+        // FTS検索（インメモリDBでもFTS5は動作する）
+        let results = search_sessions(&conn, "Rust", 10, &Default::default()).unwrap();
+        assert_eq!(results.len(), 1, "FTS should find Rust tutorial");
+        assert_eq!(results[0].session_id, "id1");
+    }
+
+    #[test]
+    fn test_search_fts5_special_chars() {
+        let conn = setup_test_db();
+        insert_session(&conn, "id1", "hello world", &[]);
+        assert!(search_sessions(&conn, "AND OR NOT", 10, &Default::default()).is_ok());
+        assert!(search_sessions(&conn, "hello*", 10, &Default::default()).is_ok());
+        assert!(search_sessions(&conn, "\"unclosed", 10, &Default::default()).is_ok());
+    }
+
+    #[test]
+    fn test_search_tag_filter_exact_match() {
+        let conn = setup_test_db();
+        insert_session(&conn, "id1", "s1", &["#rust", "#async"]);
+        insert_session(&conn, "id2", "s2", &["#python"]);
+        insert_session(&conn, "id3", "s3", &["#rustlang"]);
+
+        // まず全件返ることを確認
+        let all = search_sessions(&conn, "", 200, &Default::default()).unwrap();
+        eprintln!("All sessions count: {}", all.len());
+
+        // タグフィルタ: #rust は #rustlang にマッチしないこと
+        let mut filters = FilterParams::default();
+        filters.tags = Some(vec!["#rust".to_string()]);
+        let results = search_sessions(&conn, "", 200, &filters).unwrap();
+        eprintln!("Filtered sessions count: {}", results.len());
+        assert_eq!(
+            results.len(),
+            1,
+            "#rust should match only id1, not #rustlang"
+        );
+        assert_eq!(results[0].session_id, "id1");
+    }
+
+    #[test]
+    fn test_toggle_bookmark() {
+        let conn = setup_test_db();
+        insert_session(&conn, "id1", "test", &[]);
+        assert!(toggle_bookmark(&conn, "id1").unwrap());
+        assert!(!toggle_bookmark(&conn, "id1").unwrap());
+    }
+
+    #[test]
+    fn test_create_and_delete_tag() {
+        let conn = setup_test_db();
+        insert_session(&conn, "id1", "test", &["#rust"]);
+        let params = CreateTagParams {
+            tag: "rust".to_string(),
+            color: "#22C55E".to_string(),
+            description: "Rust".to_string(),
+        };
+        create_tag(&conn, &params).unwrap();
+        let affected = delete_tag_full(&conn, "#rust").unwrap();
+        assert_eq!(affected, 1);
+        let tags: String = conn
+            .query_row(
+                "SELECT tags FROM user_data WHERE session_id='id1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(!tags.contains("#rust"));
+    }
+
+    #[test]
+    fn test_rename_tag_no_partial_match() {
+        let conn = setup_test_db();
+        insert_session(&conn, "id1", "test", &["#rust"]);
+        insert_session(&conn, "id2", "test2", &["#rustlang"]);
+        let affected = rename_tag(&conn, "#rust", "systems").unwrap();
+        assert_eq!(affected, 1);
+        let tags: String = conn
+            .query_row(
+                "SELECT tags FROM user_data WHERE session_id='id2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(tags.contains("rustlang"));
+    }
+
+    #[test]
+    fn test_merge_tags() {
+        let conn = setup_test_db();
+        insert_session(&conn, "id1", "test", &["#rust"]);
+        insert_session(&conn, "id2", "test2", &["#rust", "#systems"]);
+        let affected = merge_tags(&conn, "#rust", "#systems").unwrap();
+        assert_eq!(affected, 2);
+        let tags: String = conn
+            .query_row(
+                "SELECT tags FROM user_data WHERE session_id='id1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(tags.contains("systems"));
+    }
 }

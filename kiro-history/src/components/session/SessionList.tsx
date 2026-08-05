@@ -205,7 +205,11 @@ export function SessionList({
   const handleDelete = useCallback(
     async (e: React.MouseEvent, session: SessionSummary) => {
       e.stopPropagation();
-      onDeleteMultiple?.([session.session_id]);
+      const title = session.title || "このセッション";
+      const ok = await api.confirmDelete(
+        `「${title}」を削除しますか？\nこの操作は取り消せません。`
+      );
+      if (ok) onDeleteMultiple?.([session.session_id]);
     },
     [onDeleteMultiple]
   );
@@ -298,7 +302,12 @@ export function SessionList({
             </span>
             {checkedIds.size > 0 && (
               <button
-                onClick={() => onDeleteMultiple?.(Array.from(checkedIds))}
+                onClick={async () => {
+                  const ok = await api.confirmDelete(
+                    `選択した ${checkedIds.size} 件のセッションを削除しますか？\nこの操作は取り消せません。`
+                  );
+                  if (ok) onDeleteMultiple?.(Array.from(checkedIds));
+                }}
                 className="text-xs px-2 py-1 rounded cursor-pointer font-medium"
                 style={{ background: "#EF4444", color: "#fff" }}
               >

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import type {
   CodeSnippetWithSession,
   CreateTagParams,
@@ -162,4 +163,7 @@ export const api = {
     invoke<{ sessions_dir: string; sqlite_db_path: string; index_db_path: string }>(
       "get_current_paths"
     ),
+
+  // ── ダイアログ ───────────────────────────────────────────────────────────────
+  confirmDelete: (message: string) => confirm(message, { title: "削除の確認", kind: "warning" }),
 };
