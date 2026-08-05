@@ -35,6 +35,10 @@ pub struct AppState {
     pub config: AppConfig,
     /// 直近開いたセッションのメモリキャッシュ (LRU, 最大50件)
     pub session_cache: LruCache<String, Arc<crate::models::Session>>,
+    /// Windows: UNCパス経由のSQLite一時コピーパス（再コピー防止）
+    /// コピー元のmtime と一致している間はキャッシュを使い回す
+    #[allow(dead_code)]
+    pub sqlite_tmp_cache: Option<(PathBuf, std::time::SystemTime)>,
 }
 
 impl AppState {
@@ -52,6 +56,7 @@ impl AppState {
             sqlite_db_path,
             config,
             session_cache: LruCache::new(NonZeroUsize::new(SESSION_CACHE_CAPACITY).unwrap()),
+            sqlite_tmp_cache: None,
         }
     }
 }
@@ -344,5 +349,63 @@ mod tests {
         }
         // Windows環境ではWSLがない場合もNoneを返す（CI環境）
         let _ = result;
+    }
+}
+
+/// Windows: キャッシュ済み一時パスがあれば返す（不変参照版、コピーはしない）
+pub fn cached_sqlite_path(state: &AppState) -> Option<&std::path::Path> {
+    #[cfg(target_os = "windows")]
+    {
+        state
+            .sqlite_tmp_cache
+            .as_ref()
+            .filter(|(p, _)| p.exists())
+            .map(|(p, _)| p.as_path())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        None
+    }
+}
+
+/// Windows: UNCパス経由のSQLiteを一時ファイルにコピーし、
+/// 変更がなければキャッシュを使い回す
+/// 返り値: (使用するパス, 一時ファイルかどうか)
+pub fn get_sqlite_path_for_windows(
+    state: &mut AppState,
+    original_path: &std::path::Path,
+) -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let tmp_path = std::env::temp_dir().join("hi-kiro-sqlite-shared-tmp.db");
+
+        // 元ファイルのmtimeを取得
+        let current_mtime = original_path.metadata().and_then(|m| m.modified()).ok();
+
+        // キャッシュが有効かチェック（mtimeが一致していれば再コピー不要）
+        let cache_valid = match (&state.sqlite_tmp_cache, current_mtime) {
+            (Some((cached_path, cached_mtime)), Some(cur)) => {
+                cached_path == &tmp_path && cached_mtime == cur && tmp_path.exists()
+            }
+            _ => false,
+        };
+
+        if !cache_valid {
+            if std::fs::copy(original_path, &tmp_path).is_ok() {
+                state.sqlite_tmp_cache = current_mtime.map(|m| (tmp_path.clone(), m));
+                return tmp_path;
+            }
+        } else {
+            return tmp_path;
+        }
+
+        // コピー失敗時はオリジナルパスで試みる
+        original_path.to_path_buf()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state; // suppress unused warning
+        original_path.to_path_buf()
     }
 }

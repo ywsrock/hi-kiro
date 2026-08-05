@@ -125,17 +125,21 @@ pub fn rebuild_index(
     sqlite_db_path: &Path,
     app: Option<&AppHandle>,
 ) -> Result<()> {
-    // First pass: count total for progress reporting (cheap)
-    let jsonl_sessions = jsonl::parse_all(sessions_dir);
-    let jsonl_count = jsonl_sessions.len() as u32;
+    // First pass: メタデータのみでカウント（メッセージ本文はロードしない）
+    let mut jsonl_count: u32 = 0;
+    jsonl::stream_meta(sessions_dir, |_| {
+        jsonl_count += 1;
+    });
 
     // Count SQLite sessions quickly (no full parse)
-    // Windows UNCパス対応: 一時ファイルにコピーしてから開く
+    // Windows UNCパス対応: 一時ファイルコピー（最新のみ、キャッシュは呼び出し元で管理）
     let sqlite_count: u32 = if sqlite_db_path.exists() {
         #[cfg(target_os = "windows")]
         let sqlite_open_path = {
-            let tmp = std::env::temp_dir().join("hi-kiro-sqlite-count-tmp.db");
-            std::fs::copy(sqlite_db_path, &tmp).ok();
+            let tmp = std::env::temp_dir().join("hi-kiro-sqlite-shared-tmp.db");
+            if !tmp.exists() {
+                std::fs::copy(sqlite_db_path, &tmp).ok();
+            }
             tmp
         };
         #[cfg(not(target_os = "windows"))]
@@ -161,27 +165,52 @@ pub fn rebuild_index(
     let total = jsonl_count + sqlite_count;
 
     let mut processed: u32 = 0;
+    const BATCH_SIZE: u32 = 1000; // 1000件ごとにコミット
 
-    // Index JSONL sessions
-    for session in &jsonl_sessions {
+    // トランザクション開始（自動コミットを防ぎ書き込みを高速化）
+    conn.execute_batch("BEGIN")?;
+
+    // Index JSONL sessions (stream_metaでメッセージ本文をロードしない)
+    jsonl::stream_meta(sessions_dir, |meta| {
         let is_deleted: bool = conn
             .query_row(
                 "SELECT 1 FROM deleted_sessions WHERE session_id = ?1",
-                params![session.id],
+                params![meta.id],
                 |_| Ok(true),
             )
             .unwrap_or(false);
         if !is_deleted {
-            upsert_session(conn, session)?;
+            let session = Session {
+                id: meta.id.clone(),
+                title: meta.title.clone(),
+                cwd: meta.cwd.clone(),
+                created_at: meta.created_at,
+                updated_at: meta.updated_at,
+                messages: vec![],
+                model_name: meta.model_name.clone(),
+                max_context_pct: meta.max_context_pct,
+                total_tool_uses: meta.total_tool_uses,
+                total_cycles: meta.total_cycles,
+                total_duration_secs: meta.total_duration_secs,
+                source: meta.source.clone(),
+            };
+            let full_text = format!("{} {}", meta.title, meta.cwd);
+            if let Err(e) = upsert_session_with_text(conn, &session, &full_text) {
+                warn!("Failed to index JSONL session {}: {}", session.id, e);
+            }
         }
         processed += 1;
+        if processed.is_multiple_of(BATCH_SIZE) {
+            if let Err(e) = conn.execute_batch("COMMIT; BEGIN") {
+                warn!("Batch commit failed at {}: {}", processed, e);
+            }
+        }
         if processed.is_multiple_of(10) {
             if let Some(app) = app {
                 let _ = app.emit("index:progress", IndexProgress { processed, total });
             }
         }
-    }
-    drop(jsonl_sessions); // Free JSONL memory before SQLite
+    });
 
     // Stream SQLite sessions — never loads all sessions into memory at once
     if sqlite_db_path.exists() {
@@ -215,6 +244,12 @@ pub fn rebuild_index(
                 }
             }
             processed += 1;
+            // バッチコミット（クロージャ内なのでエラーは無視してログのみ）
+            if processed.is_multiple_of(BATCH_SIZE) {
+                if let Err(e) = conn.execute_batch("COMMIT; BEGIN") {
+                    warn!("Batch commit failed at {}: {}", processed, e);
+                }
+            }
             if processed.is_multiple_of(50) {
                 if let Some(app) = app {
                     let _ = app.emit("index:progress", IndexProgress { processed, total });
@@ -222,6 +257,9 @@ pub fn rebuild_index(
             }
         });
     }
+
+    // 最終コミット
+    conn.execute_batch("COMMIT")?;
 
     if let Some(app) = app {
         let _ = app.emit(
@@ -300,6 +338,7 @@ pub fn upsert_session_with_text(
 }
 
 /// Insert or update a session in the index.
+#[allow(dead_code)]
 fn upsert_session(conn: &Connection, session: &Session) -> Result<()> {
     // Check if update is needed via updated_at
     let existing: Option<i64> = conn
@@ -363,6 +402,7 @@ fn upsert_session(conn: &Connection, session: &Session) -> Result<()> {
 }
 
 /// Combine title + cwd + all message content for FTS indexing.
+#[allow(dead_code)]
 fn build_full_text(session: &Session) -> String {
     let mut parts = vec![session.title.clone(), session.cwd.clone()];
     for msg in &session.messages {
