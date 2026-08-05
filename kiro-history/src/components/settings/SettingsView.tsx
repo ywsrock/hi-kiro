@@ -35,7 +35,7 @@ export function SettingsView() {
     // 現在の設定を読み込み
     api.getModelPricesPath()
       .then(setPricesPath)
-      .catch(() => setPricesPath("(パスの取得に失敗しました)"));
+      .catch((e) => { console.error("getModelPricesPath failed:", e); setPricesPath("(パスの取得に失敗しました)"); });
     api.getModelPrices().then((cfg) => {
       setModelPrices(cfg.models);
       setPricesUpdated(cfg.last_updated);

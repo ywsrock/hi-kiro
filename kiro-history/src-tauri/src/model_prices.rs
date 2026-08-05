@@ -1,7 +1,7 @@
 //! モデル価格設定の読み込みと管理
 //!
 //! 価格は `dirs::data_dir()/hi-kiro/model_prices.json` から読み込みます。
-//! OS別パス例: Linux=~/.local/share/hi-kiro/, Windows=%APPDATA%\hi-kiro\, macOS=~/Library/Application Support/hi-kiro/
+//! OS別パス例: `Linux: ~/.local/share/hi-kiro/` / `Windows: %APPDATA%\hi-kiro\` / `macOS: ~/Library/Application Support/hi-kiro/`
 //! ファイルが存在しない場合はデフォルト値（constants.rs）を使用します。
 //! 価格改定時はアプリを再ビルドせずにJSONファイルを編集するだけで反映されます。
 

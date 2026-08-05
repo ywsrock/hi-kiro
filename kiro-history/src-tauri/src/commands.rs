@@ -1019,15 +1019,16 @@ pub fn get_model_prices() -> Result<crate::model_prices::ModelPricesConfig, Stri
 /// モデル価格設定をリロード（再起動不要でAppStateのキャッシュを更新）
 #[tauri::command]
 pub fn reload_model_prices(state: State<'_, Mutex<AppState>>) -> Result<String, String> {
-    // まず設定ファイルのバリデーション（パース失敗はエラーで返す）
+    // ファイルを一度だけ読み込み・パース（失敗はエラーで返す）
     let path = crate::model_prices::config_path();
-    if path.exists() {
+    let config = if path.exists() {
         let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
         serde_json::from_str::<crate::model_prices::ModelPricesConfig>(&json)
-            .map_err(|e| format!("model_prices.json のパースエラー: {}", e))?;
-    }
-    // AppState のキャッシュを更新
-    let config = crate::model_prices::load();
+            .map_err(|e| format!("model_prices.json のパースエラー: {}", e))?
+    } else {
+        crate::model_prices::ModelPricesConfig::default()
+    };
+    // バリデーション済みの config を直接キャッシュ更新（二重I/O・レース回避）
     let msg = format!(
         "価格設定を再読み込みしました（{}、{}モデル定義）",
         config.last_updated,
