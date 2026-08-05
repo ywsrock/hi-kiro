@@ -176,6 +176,11 @@ export const api = {
   prefetchSession: (sessionId: string) =>
     invoke<void>("prefetch_session", { sessionId }),
 
+  // ── モデル価格設定 ──────────────────────────────────────────────────────────────
+  getModelPricesPath: () => invoke<string>("get_model_prices_path"),
+  getModelPrices: () => invoke<{ last_updated: string; models: Array<{ pattern: string; input: number; output: number; ctx: number }> }>("get_model_prices"),
+  reloadModelPrices: () => invoke<string>("reload_model_prices"),
+
   // ── ダイアログ ───────────────────────────────────────────────────────────────
   confirmDelete: (message: string) => confirm(message, { title: "削除の確認", kind: "warning" }),
 };

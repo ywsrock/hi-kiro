@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Search, Save, RotateCcw } from "lucide-react";
+import { RefreshCw, Search, Save, RotateCcw, FileJson } from "lucide-react";
 import { api } from "../../api";
 import { useToast } from "../ui/Toast";
 
@@ -22,6 +22,10 @@ export function SettingsView() {
   const [sqlitePath, setSqlitePath] = useState("");
   const [detecting, setDetecting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pricesPath, setPricesPath] = useState("");
+  const [reloading, setReloading] = useState(false);
+  const [modelPrices, setModelPrices] = useState<Array<{ pattern: string; input: number; output: number; ctx: number }>>([]);
+  const [pricesUpdated, setPricesUpdated] = useState("");
   const [isWindows, setIsWindows] = useState(false);
 
   useEffect(() => {
@@ -29,6 +33,11 @@ export function SettingsView() {
     setIsWindows(navigator.userAgent.includes("Windows") || navigator.platform.includes("Win"));
 
     // 現在の設定を読み込み
+    api.getModelPricesPath().then(setPricesPath).catch(console.error);
+    api.getModelPrices().then((cfg) => {
+      setModelPrices(cfg.models);
+      setPricesUpdated(cfg.last_updated);
+    }).catch(console.error);
     Promise.all([api.getConfig(), api.getCurrentPaths(), api.getIndexStats()])
       .then(([cfg, paths, s]) => {
         setSessionsDir(cfg.sessions_dir ?? "");
@@ -250,6 +259,95 @@ export function SettingsView() {
           </div>
         </div>
       )}
+
+      {/* ── モデル価格設定 ── */}
+      <div
+        className="rounded-lg p-4 mb-4"
+        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+      >
+        <h3 className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
+          Model Prices
+        </h3>
+        <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
+          コスト試算に使用するモデル価格を設定ファイルで管理します。
+          ビルドなしで価格を更新できます。
+        </p>
+        <div className="flex items-center gap-2 mb-3">
+          <FileJson size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+          <code
+            className="text-xs break-all flex-1"
+            style={{ color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            {pricesPath || "読み込み中..."}
+          </code>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              setReloading(true);
+              try {
+                const msg = await api.reloadModelPrices();
+                const cfg = await api.getModelPrices();
+                setModelPrices(cfg.models);
+                setPricesUpdated(cfg.last_updated);
+                toast.success(msg);
+              } catch (e) {
+                toast.error(`エラー: ${e}`);
+              } finally {
+                setReloading(false);
+              }
+            }}
+            disabled={reloading}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded cursor-pointer"
+            style={{ background: "var(--accent)", color: "#000", opacity: reloading ? 0.6 : 1 }}
+          >
+            <RefreshCw size={12} className={reloading ? "animate-spin" : ""} />
+            {reloading ? "再読み込み中..." : "価格を再読み込み"}
+          </button>
+        </div>
+        <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
+          ファイルを編集後、「価格を再読み込み」を押すと即時反映されます（再起動不要）
+        </p>
+
+        {/* 現在の価格テーブル */}
+        {modelPrices.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+              現在の価格設定{pricesUpdated ? `（${pricesUpdated}）` : ""}
+            </p>
+            <div className="rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+              <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "var(--bg)", borderBottom: "1px solid var(--border)" }}>
+                    <th className="px-3 py-1.5 text-left font-medium" style={{ color: "var(--text-muted)" }}>パターン</th>
+                    <th className="px-3 py-1.5 text-right font-medium" style={{ color: "var(--text-muted)" }}>入力 $/MTok</th>
+                    <th className="px-3 py-1.5 text-right font-medium" style={{ color: "var(--text-muted)" }}>出力 $/MTok</th>
+                    <th className="px-3 py-1.5 text-right font-medium" style={{ color: "var(--text-muted)" }}>CTX</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modelPrices.map((m, i) => (
+                    <tr
+                      key={m.pattern}
+                      style={{
+                        borderBottom: i < modelPrices.length - 1 ? "1px solid var(--border)" : "none",
+                        background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+                      }}
+                    >
+                      <td className="px-3 py-1.5 font-mono" style={{ color: "var(--accent)" }}>{m.pattern}</td>
+                      <td className="px-3 py-1.5 text-right" style={{ color: "var(--text-primary)" }}>${m.input}</td>
+                      <td className="px-3 py-1.5 text-right" style={{ color: "var(--text-primary)" }}>${m.output}</td>
+                      <td className="px-3 py-1.5 text-right" style={{ color: "var(--text-muted)" }}>
+                        {(m.ctx / 1000).toFixed(0)}K
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ── Index ── */}
       <div
