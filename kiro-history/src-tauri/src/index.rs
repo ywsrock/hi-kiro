@@ -1,4 +1,5 @@
 use anyhow::Result;
+use log::warn;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -209,7 +210,9 @@ pub fn rebuild_index(
                 };
                 // Build full_text from meta (title + cwd + first message snippet)
                 let full_text = format!("{} {} {}", meta.title, meta.cwd, meta.first_user_message);
-                let _ = upsert_session_with_text(conn, &session, &full_text);
+                if let Err(e) = upsert_session_with_text(conn, &session, &full_text) {
+                    warn!("Failed to index session {}: {}", session.id, e);
+                }
             }
             processed += 1;
             if processed.is_multiple_of(50) {

@@ -1,4 +1,5 @@
 mod commands;
+mod constants;
 mod db;
 mod index;
 mod models;
@@ -18,6 +19,21 @@ pub fn run() {
     // GDK_BACKEND / WEBKIT env vars must be set before process start.
     // Use ~/kiro-history/dev.sh to launch with proper WSLg/IME settings.
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Folder {
+                        path: dirs::data_dir()
+                            .unwrap_or_else(|| std::path::PathBuf::from("."))
+                            .join("hi-kiro/logs"),
+                        file_name: Some("hi-kiro".to_string()),
+                    },
+                ))
+                .max_file_size(crate::constants::LOG_MAX_FILE_SIZE)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())

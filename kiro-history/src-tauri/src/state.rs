@@ -251,3 +251,79 @@ pub fn save_config(config: &AppConfig) -> anyhow::Result<()> {
     std::fs::write(config_path, json)?;
     Ok(())
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_wsl_unc_path_wsl_dollar() {
+        let path = wsl_unc_path("wsl$", "Ubuntu-24.04", "/home/user/.kiro/sessions/cli");
+        let s = path.to_string_lossy();
+        assert!(s.contains("wsl$"));
+        assert!(s.contains("Ubuntu-24.04"));
+        assert!(s.contains("home"));
+        assert!(s.contains("sessions"));
+    }
+
+    #[test]
+    fn test_wsl_unc_path_wsl_localhost() {
+        let path = wsl_unc_path(
+            "wsl.localhost",
+            "Ubuntu",
+            "/home/user/.local/share/kiro-cli/data.sqlite3",
+        );
+        let s = path.to_string_lossy();
+        assert!(s.contains("wsl.localhost"));
+        assert!(s.contains("Ubuntu"));
+        assert!(s.contains("data.sqlite3"));
+    }
+
+    #[test]
+    fn test_wsl_unc_path_slash_to_backslash() {
+        let path = wsl_unc_path("wsl$", "Ubuntu", "/home/user/test");
+        let s = path.to_string_lossy();
+        // Linuxパスのスラッシュがバックスラッシュに変換されること
+        assert!(!s.contains("//"));
+    }
+
+    #[test]
+    fn test_resolve_paths_default_non_windows() {
+        // Linux/macOSではホームディレクトリのデフォルトパスが使われること
+        let config = AppConfig::default();
+        let (sessions_dir, sqlite_db, _index_db) = resolve_paths(&config);
+        let sessions_str = sessions_dir.to_string_lossy();
+        let sqlite_str = sqlite_db.to_string_lossy();
+        assert!(sessions_str.contains(".kiro") || sessions_str.contains("kiro"));
+        assert!(sqlite_str.contains("kiro-cli") || sqlite_str.contains("kiro"));
+    }
+
+    #[test]
+    fn test_resolve_paths_config_override() {
+        // configで明示指定した場合はそれが使われること
+        let config = AppConfig {
+            sessions_dir: Some("/custom/sessions".to_string()),
+            sqlite_db_path: Some("/custom/data.sqlite3".to_string()),
+            theme: None,
+        };
+        let (sessions_dir, sqlite_db, _) = resolve_paths(&config);
+        assert_eq!(sessions_dir.to_string_lossy(), "/custom/sessions");
+        assert_eq!(sqlite_db.to_string_lossy(), "/custom/data.sqlite3");
+    }
+
+    #[test]
+    fn test_detect_wsl_paths_non_windows_returns_none() {
+        // Linux/macOS環境では常にNoneを返すこと
+        let result = detect_wsl_paths();
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(result.sessions_dir.is_none());
+            assert!(result.sqlite_db_path.is_none());
+            assert!(result.distro.is_none());
+        }
+        // Windows環境ではWSLがない場合もNoneを返す（CI環境）
+        let _ = result;
+    }
+}

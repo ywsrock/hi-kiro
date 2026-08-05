@@ -1,3 +1,4 @@
+use crate::constants::EXPORT_ID_PREFIX_LEN;
 use anyhow::Result;
 use regex::Regex;
 use similar::{ChangeTag, TextDiff};
@@ -254,7 +255,13 @@ pub fn export_sessions_zip(sessions: &[Session], format: &ExportFormat) -> Resul
             ExportFormat::Markdown => "md",
             ExportFormat::Html | ExportFormat::Pdf => "html",
         };
-        let filename = format!("{}.{}", sanitize_filename(&session.title), ext);
+        let id_prefix = &session.id[..session.id.len().min(EXPORT_ID_PREFIX_LEN)];
+        let filename = format!(
+            "{}_{}.{}",
+            sanitize_filename(&session.title),
+            id_prefix,
+            ext
+        );
         zip.start_file(&filename, options)?;
         zip.write_all(content.as_bytes())?;
     }

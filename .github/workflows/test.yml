@@ -41,10 +41,9 @@ jobs:
         run: npm run build
         working-directory: kiro-history
 
-      # Uncomment when frontend tests are added:
-      # - name: Run frontend tests
-      #   run: npm test
-      #   working-directory: kiro-history
+      - name: Run frontend tests
+        run: npm test
+        working-directory: kiro-history
 
   # ── Rust Tests ────────────────────────────────────────────────────────────────
   test-rust:
