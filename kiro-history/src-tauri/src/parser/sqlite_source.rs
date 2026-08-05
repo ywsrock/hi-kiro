@@ -250,19 +250,22 @@ fn extract_assistant_text_quick(assistant: &Value) -> Option<String> {
 
 /// Load FULL session with all messages (called only when user opens a session).
 pub fn load_full_session(db_path: &Path, session_id: &str) -> Option<Session> {
-    // Windows UNCパス対応: 一時ファイルにコピーしてから開く
+    // Windows UNCパス（\\wsl$\...）のみ一時コピー
+    // 呼び出し元が既にキャッシュ済みローカルパスを渡した場合はコピー不要
     #[cfg(target_os = "windows")]
-    let (_tmp_path, conn) = {
-        let tmp = std::env::temp_dir().join("hi-kiro-sqlite-full-tmp.db");
-        std::fs::copy(db_path, &tmp).ok()?;
-        let c = Connection::open_with_flags(&tmp, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
-        (Some(tmp), c)
+    let conn = {
+        let is_unc = db_path.to_string_lossy().starts_with("\\\\");
+        let open_path = if is_unc {
+            let tmp = std::env::temp_dir().join("hi-kiro-sqlite-full-tmp.db");
+            std::fs::copy(db_path, &tmp).ok()?;
+            tmp
+        } else {
+            db_path.to_path_buf()
+        };
+        Connection::open_with_flags(&open_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?
     };
     #[cfg(not(target_os = "windows"))]
-    let (_tmp_path, conn) = {
-        let c = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
-        (None::<std::path::PathBuf>, c)
-    };
+    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
     let _ = conn.execute_batch("PRAGMA cache_size = -16384; PRAGMA mmap_size = 134217728;");
 
     // Try v2 first

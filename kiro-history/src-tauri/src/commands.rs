@@ -60,10 +60,11 @@ fn load_session_by_id(state: &AppState, session_id: &str) -> Option<Session> {
         }
     }
 
-    // Try SQLite: use targeted load (no full scan)
-    // Windows UNCパスでは exists() が false を返す場合があるため
-    // exists() に関わらず load を試みる
-    if let Some(s) = sqlite_source::load_full_session(&sqlite_path, session_id) {
+    // Try SQLite: キャッシュ済みパスがあればそちらを使う（Windows一時コピーの再利用）
+    let effective_sqlite_path = crate::state::cached_sqlite_path(state)
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| sqlite_path.clone());
+    if let Some(s) = sqlite_source::load_full_session(&effective_sqlite_path, session_id) {
         return Some(s);
     }
 
@@ -172,15 +173,15 @@ pub async fn rebuild_index(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<(), String> {
-    let (sessions_dir, sqlite_db_path) = {
-        let state = state.lock().map_err(|e| e.to_string())?;
-        (state.sessions_dir.clone(), state.sqlite_db_path.clone())
-    };
-
-    // Re-open connection for this operation (can't hold lock across await)
-    let index_path = {
-        let state = state.lock().map_err(|e| e.to_string())?;
-        state.index_db_path.clone()
+    let (sessions_dir, sqlite_db_path, index_path) = {
+        let mut state_guard = state.lock().map_err(|e| e.to_string())?;
+        let sessions_dir = state_guard.sessions_dir.clone();
+        let index_path = state_guard.index_db_path.clone();
+        // 先にcloneしてから &mut を渡す（同時借用エラー回避）
+        let original_sqlite = state_guard.sqlite_db_path.clone();
+        let sqlite_db_path =
+            crate::state::get_sqlite_path_for_windows(&mut state_guard, &original_sqlite);
+        (sessions_dir, sqlite_db_path, index_path)
     };
 
     let conn = index::open_index_db(&index_path).map_err(|e| e.to_string())?;

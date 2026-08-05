@@ -49,6 +49,117 @@ pub fn parse_all(sessions_dir: &Path) -> Vec<Session> {
     sessions
 }
 
+/// ストリーミング版: メタデータのみ抽出してコールバックに渡す
+/// メッセージ本文を全件メモリに載せない（大規模JSONL向け）
+pub fn stream_meta<F>(sessions_dir: &Path, mut callback: F)
+where
+    F: FnMut(crate::parser::sqlite_source::SessionMeta),
+{
+    let entries = match std::fs::read_dir(sessions_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+
+        // Regular <uuid>.json metadata (メッセージ本文はロードしない)
+        if path.extension().and_then(|e| e.to_str()) == Some("json") {
+            let stem = path
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            let jsonl_path = path.with_extension("jsonl");
+            if jsonl_path.exists() {
+                if let Ok(meta) = extract_meta_from_json(&path, &stem) {
+                    callback(meta);
+                }
+            }
+        }
+
+        // Subdirectory tasks/ format
+        if path.is_dir() {
+            let tasks_dir = path.join("tasks");
+            if tasks_dir.exists() {
+                if let Ok(meta) = extract_meta_from_tasks_dir(&path, &tasks_dir) {
+                    callback(meta);
+                }
+            }
+        }
+    }
+}
+
+/// .jsonファイルからメタデータのみ抽出（メッセージ本文なし）
+/// parse_jsonl_pair() と同等のメタデータを返すが messages は読まない
+fn extract_meta_from_json(
+    json_path: &std::path::Path,
+    session_id: &str,
+) -> anyhow::Result<crate::parser::sqlite_source::SessionMeta> {
+    let json_str = std::fs::read_to_string(json_path)?;
+    let meta: serde_json::Value = serde_json::from_str(&json_str)?;
+    // extract_session_meta で model_name/max_context_pct/tool_uses 等を復元
+    let (model_name, max_context_pct, total_tool_uses, total_cycles, total_duration_secs) =
+        extract_session_meta(&meta);
+    // .jsonlの行数からmessage_countを推定（本文不読）
+    let jsonl_path = json_path.with_extension("jsonl");
+    let message_count = if jsonl_path.exists() {
+        std::fs::read_to_string(&jsonl_path)
+            .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count())
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    Ok(crate::parser::sqlite_source::SessionMeta {
+        id: session_id.to_string(),
+        title: meta["title"].as_str().unwrap_or("Untitled").to_string(),
+        cwd: meta["cwd"].as_str().unwrap_or("").to_string(),
+        created_at: parse_rfc3339_to_ms(meta["created_at"].as_str().unwrap_or("")),
+        updated_at: parse_rfc3339_to_ms(meta["updated_at"].as_str().unwrap_or("")),
+        source: crate::models::SessionSource::Jsonl,
+        model_name,
+        max_context_pct,
+        total_tool_uses,
+        total_cycles,
+        total_duration_secs,
+        first_user_message: String::new(),
+        message_count,
+    })
+}
+
+/// tasks/ディレクトリからメタデータのみ抽出
+fn extract_meta_from_tasks_dir(
+    session_dir: &std::path::Path,
+    tasks_dir: &std::path::Path,
+) -> anyhow::Result<crate::parser::sqlite_source::SessionMeta> {
+    let meta_path = tasks_dir.join("project_metadata.json");
+    let session_id = session_dir
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    if meta_path.exists() {
+        let json_str = std::fs::read_to_string(&meta_path)?;
+        let meta: serde_json::Value = serde_json::from_str(&json_str)?;
+        return Ok(crate::parser::sqlite_source::SessionMeta {
+            id: session_id,
+            title: meta["title"].as_str().unwrap_or("Untitled").to_string(),
+            cwd: meta["cwd"].as_str().unwrap_or("").to_string(),
+            created_at: parse_rfc3339_to_ms(meta["created_at"].as_str().unwrap_or("")),
+            updated_at: parse_rfc3339_to_ms(meta["updated_at"].as_str().unwrap_or("")),
+            source: crate::models::SessionSource::Jsonl,
+            model_name: None,
+            max_context_pct: None,
+            total_tool_uses: 0,
+            total_cycles: 0,
+            total_duration_secs: 0,
+            first_user_message: String::new(),
+            message_count: 0,
+        });
+    }
+    anyhow::bail!("No project_metadata.json in {}", tasks_dir.display())
+}
+
 /// Parse a .json + .jsonl pair into a Session.
 fn parse_jsonl_pair(json_path: &Path, jsonl_path: &Path, session_id: &str) -> Result<Session> {
     let json_str = fs::read_to_string(json_path)
