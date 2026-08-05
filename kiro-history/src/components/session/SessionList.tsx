@@ -214,6 +214,21 @@ export function SessionList({
     [onDeleteMultiple]
   );
 
+  // ホバー時プリフェッチ（デバウンス付き、150ms後に先読み開始）
+  const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleHover = useCallback((sessionId: string) => {
+    if (prefetchTimer.current) clearTimeout(prefetchTimer.current);
+    prefetchTimer.current = setTimeout(() => {
+      api.prefetchSession(sessionId).catch(() => {}); // エラーは無視（あくまで高速化のため）
+    }, 150);
+  }, []);
+  const handleHoverEnd = useCallback(() => {
+    if (prefetchTimer.current) {
+      clearTimeout(prefetchTimer.current);
+      prefetchTimer.current = null;
+    }
+  }, []);
+
   const toggleCheck = (id: string) => {
     setCheckedIds((prev) => {
       const next = new Set(prev);
@@ -354,6 +369,8 @@ export function SessionList({
                       onSelect(s.session_id);
                     }
                   }}
+                  onMouseEnter={() => handleHover(s.session_id)}
+                  onMouseLeave={handleHoverEnd}
                   className="session-card group mx-2 my-1 px-3 py-2 rounded cursor-pointer"
                   style={{
                     background: isSelected && !selectMode

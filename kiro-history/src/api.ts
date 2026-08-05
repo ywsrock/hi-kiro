@@ -164,6 +164,10 @@ export const api = {
       "get_current_paths"
     ),
 
+  // ── プリフェッチ ──────────────────────────────────────────────────────────────
+  prefetchSession: (sessionId: string) =>
+    invoke<void>("prefetch_session", { sessionId }),
+
   // ── ダイアログ ───────────────────────────────────────────────────────────────
   confirmDelete: (message: string) => confirm(message, { title: "削除の確認", kind: "warning" }),
 };

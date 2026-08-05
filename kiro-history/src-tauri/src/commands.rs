@@ -90,12 +90,20 @@ pub fn get_session_detail(
     session_id: String,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<SessionDetail, String> {
-    let state = state.lock().map_err(|e| e.to_string())?;
-    let conn = &state.index_conn;
+    let mut state = state.lock().map_err(|e| e.to_string())?;
 
-    // Load full messages from source
-    let session = load_session_by_id(&state, &session_id)
-        .ok_or_else(|| format!("Session not found: {}", session_id))?;
+    // キャッシュヒット確認（2回目以降は即返す）
+    let session = if let Some(cached) = state.session_cache.get(&session_id) {
+        cached.clone()
+    } else {
+        // キャッシュミス: ファイル/DBから読み込んでキャッシュに保存
+        let loaded = load_session_by_id(&state, &session_id)
+            .ok_or_else(|| format!("Session not found: {}", session_id))?;
+        state.session_cache.put(session_id.clone(), loaded.clone());
+        loaded
+    };
+
+    let conn = &state.index_conn;
 
     // Build summary from meta
     let summary = {
@@ -941,4 +949,27 @@ pub fn get_current_paths(state: State<'_, Mutex<AppState>>) -> Result<serde_json
         "sqlite_db_path": s.sqlite_db_path.to_string_lossy(),
         "index_db_path": s.index_db_path.to_string_lossy(),
     }))
+}
+
+// ── Prefetch ──────────────────────────────────────────────────────────────────
+
+/// ホバー時にセッションをキャッシュに先読みする
+#[tauri::command]
+pub fn prefetch_session(
+    session_id: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
+    let mut state = state.lock().map_err(|e| e.to_string())?;
+
+    // すでにキャッシュ済みならスキップ
+    if state.session_cache.contains(&session_id) {
+        return Ok(());
+    }
+
+    // バックグラウンドで読み込んでキャッシュに保存
+    if let Some(session) = load_session_by_id(&state, &session_id) {
+        state.session_cache.put(session_id, session);
+    }
+
+    Ok(())
 }
