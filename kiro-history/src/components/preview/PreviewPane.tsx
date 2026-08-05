@@ -193,9 +193,14 @@ function MessageBubble({ role, content }: { role: "User" | "Kiro"; content: stri
   useEffect(() => {
     const el = bubbleRef.current;
     if (!el) return;
+    // IntersectionObserver が未対応の環境（古い WebView / テスト環境）では即 visible=true
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
-      { rootMargin: "200px" } // 200px手前からプリロード
+      { rootMargin: "200px" }
     );
     observer.observe(el);
     return () => observer.disconnect();

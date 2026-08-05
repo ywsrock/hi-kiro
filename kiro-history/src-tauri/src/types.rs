@@ -17,7 +17,8 @@ pub struct CursorParams {
     pub query: String,
     pub limit: Option<u32>,
     pub filters: Option<FilterParams>,
-    pub before_updated_at: Option<i64>,
+    pub cursor_updated_at: Option<i64>,
+    pub cursor_session_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

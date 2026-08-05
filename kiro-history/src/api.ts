@@ -168,7 +168,8 @@ export const api = {
     query: string;
     limit?: number;
     filters?: import("./types").FilterParams;
-    before_updated_at?: number;
+    cursor_updated_at?: number;
+    cursor_session_id?: string;
   }) => invoke<import("./types").SessionSummary[]>("search_sessions_cursor", { params }),
 
   // ── プリフェッチ ──────────────────────────────────────────────────────────────

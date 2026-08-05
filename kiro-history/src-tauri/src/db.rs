@@ -129,13 +129,15 @@ fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSummary> {
 }
 
 /// カーソルベースページネーション版 search_sessions
-/// before_updated_at: 前回最後のupdated_at より古いものを取得 (None=先頭から)
-pub fn search_sessions_after(
+/// cursor_updated_at: このupdated_at より古いセッションを取得（None=先頭から）
+/// cursor_session_id: タイブレーク用のsession_id（None=先頭から）
+pub fn search_sessions_cursor(
     conn: &Connection,
     query: &str,
     limit: u32,
     filters: &FilterParams,
-    before_updated_at: Option<i64>,
+    cursor_updated_at: Option<i64>,
+    cursor_session_id: Option<&str>,
 ) -> Result<Vec<SessionSummary>> {
     // 通常のsearch_sessionsと同じ条件構築 + カーソル条件を追加
     let mut conditions: Vec<String> = Vec::new();
@@ -188,11 +190,24 @@ pub fn search_sessions_after(
             bind_values.push(Box::new(tag.clone()));
         }
     }
-    // カーソル条件: 前回最後のupdated_atより古いものを取得
-    if let Some(cursor) = before_updated_at {
-        let idx = bind_values.len() + 1;
-        conditions.push(format!("m.updated_at < ?{}", idx));
-        bind_values.push(Box::new(cursor));
+    // 複合カーソル条件: (updated_at, session_id) で安定ページネーション
+    // 同一updated_atを持つ行の取りこぼし/重複を防ぐ
+    if let Some(cursor_at) = cursor_updated_at {
+        let idx_at = bind_values.len() + 1;
+        let idx_id = bind_values.len() + 2;
+        if let Some(cursor_id) = cursor_session_id {
+            // updated_atが同じ行はsession_idで降順タイブレーク
+            conditions.push(format!(
+                "(m.updated_at < ?{} OR (m.updated_at = ?{} AND m.session_id < ?{}))",
+                idx_at, idx_at, idx_id
+            ));
+            bind_values.push(Box::new(cursor_at));
+            bind_values.push(Box::new(cursor_at));
+            bind_values.push(Box::new(cursor_id.to_string()));
+        } else {
+            conditions.push(format!("m.updated_at < ?{}", idx_at));
+            bind_values.push(Box::new(cursor_at));
+        }
     }
 
     let where_clause = if conditions.is_empty() {
@@ -209,7 +224,7 @@ pub fn search_sessions_after(
          FROM sessions_meta m
          LEFT JOIN user_data u ON m.session_id = u.session_id
          {where_clause}
-         ORDER BY m.updated_at DESC
+         ORDER BY m.updated_at DESC, m.session_id DESC
          LIMIT {limit}",
     );
 

@@ -987,12 +987,13 @@ pub fn search_sessions_cursor(
 ) -> Result<Vec<SessionSummary>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     let filters = params.filters.unwrap_or_default();
-    db::search_sessions_after(
+    db::search_sessions_cursor(
         &state.index_conn,
         &params.query,
         params.limit.unwrap_or(100),
         &filters,
-        params.before_updated_at,
+        params.cursor_updated_at,
+        params.cursor_session_id.as_deref(),
     )
     .map_err(|e| e.to_string())
 }
