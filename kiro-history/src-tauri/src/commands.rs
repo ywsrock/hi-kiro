@@ -998,3 +998,24 @@ pub fn search_sessions_cursor(
     )
     .map_err(|e| e.to_string())
 }
+
+// ── Model Prices ──────────────────────────────────────────────────────────────
+
+/// モデル価格設定ファイルのパスを返す
+#[tauri::command]
+pub fn get_model_prices_path() -> String {
+    crate::model_prices::config_path()
+        .to_string_lossy()
+        .to_string()
+}
+
+/// モデル価格設定をリロード（再起動不要で反映）
+#[tauri::command]
+pub fn reload_model_prices() -> Result<String, String> {
+    let config = crate::model_prices::load();
+    Ok(format!(
+        "価格設定を再読み込みしました（{}、{}モデル定義）",
+        config.last_updated,
+        config.models.len()
+    ))
+}

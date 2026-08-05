@@ -2,6 +2,7 @@ mod commands;
 mod constants;
 mod db;
 mod index;
+mod model_prices;
 mod models;
 mod operations;
 mod parser;
@@ -41,6 +42,9 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            // モデル価格設定ファイルを初回起動時に生成
+            model_prices::ensure_default_exists();
+
             // Load config and resolve paths
             let config = state::load_config();
             let (sessions_dir, sqlite_db_path, index_db_path) = state::resolve_paths(&config);
@@ -172,6 +176,8 @@ pub fn run() {
             commands::detect_wsl_paths,
             commands::get_current_paths,
             commands::prefetch_session,
+            commands::get_model_prices_path,
+            commands::reload_model_prices,
             commands::search_sessions_cursor,
         ])
         .run(tauri::generate_context!())
