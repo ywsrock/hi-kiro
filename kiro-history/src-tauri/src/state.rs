@@ -386,7 +386,7 @@ pub fn get_sqlite_path_for_windows(
         // キャッシュが有効かチェック（mtimeが一致していれば再コピー不要）
         let cache_valid = match (&state.sqlite_tmp_cache, current_mtime) {
             (Some((cached_path, cached_mtime)), Some(cur)) => {
-                cached_path == &tmp_path && cached_mtime == cur && tmp_path.exists()
+                cached_path == &tmp_path && *cached_mtime == cur && tmp_path.exists()
             }
             _ => false,
         };
