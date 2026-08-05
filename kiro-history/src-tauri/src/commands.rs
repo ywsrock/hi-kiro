@@ -51,10 +51,11 @@ fn load_session_by_id(state: &AppState, session_id: &str) -> Option<Session> {
     }
 
     // Try JSONL subdirectory (tasks/) format
-    let tasks_dir = sessions_dir.join(session_id).join("tasks");
+    // parse_all()で全件スキャンせず parse_tasks_dir()で対象1件のみ読む (O(N)→O(1))
+    let session_dir = sessions_dir.join(session_id);
+    let tasks_dir = session_dir.join("tasks");
     if tasks_dir.exists() {
-        let all = jsonl::parse_all(&sessions_dir);
-        if let Some(s) = all.into_iter().find(|s| s.id == session_id) {
+        if let Ok(s) = jsonl::parse_tasks_dir(&session_dir, &tasks_dir) {
             return Some(s);
         }
     }

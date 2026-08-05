@@ -143,7 +143,7 @@ fn extract_text_content(content: &Value) -> String {
 }
 
 /// Parse <uuid>/tasks/ directory (task session format).
-fn parse_tasks_dir(session_dir: &Path, tasks_dir: &Path) -> Result<Session> {
+pub fn parse_tasks_dir(session_dir: &Path, tasks_dir: &Path) -> Result<Session> {
     let session_id = session_dir
         .file_name()
         .unwrap_or_default()
