@@ -1,6 +1,7 @@
 use anyhow::Result;
 use regex::Regex;
 use similar::{ChangeTag, TextDiff};
+use std::sync::LazyLock;
 
 use crate::models::Session;
 use crate::types::{CodeSnippet, CodeSnippetWithSession, DiffResult, ExportFormat, FileRef};
@@ -77,10 +78,14 @@ pub fn extract_snippets_with_session(
 
 // ── File References ───────────────────────────────────────────────────────────
 
+// 正規表現を起動時1回だけコンパイル（LazyLockで安全に初期化）
+static FILE_REF_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:^|[\s`])((~|/home/[^/\s]+|/[a-zA-Z0-9])[/a-zA-Z0-9._\-]+[a-zA-Z0-9])")
+        .expect("FILE_REF_REGEX: invalid regex pattern")
+});
+
 pub fn extract_file_refs(session: &Session) -> Vec<FileRef> {
-    // Match paths starting with /, ~/, or ./
-    let re = Regex::new(r"(?:^|[\s`])((~|/home/[^/\s]+|/[a-zA-Z0-9])[/a-zA-Z0-9._\-]+[a-zA-Z0-9])")
-        .unwrap();
+    let re = &*FILE_REF_REGEX;
 
     let mut paths: std::collections::HashSet<String> = std::collections::HashSet::new();
 
@@ -254,7 +259,13 @@ pub fn export_sessions_zip(sessions: &[Session], format: &ExportFormat) -> Resul
             ExportFormat::Markdown => "md",
             ExportFormat::Html | ExportFormat::Pdf => "html",
         };
-        let filename = format!("{}.{}", sanitize_filename(&session.title), ext);
+        let id_prefix = &session.id[..session.id.len().min(8)];
+        let filename = format!(
+            "{}_{}.{}",
+            sanitize_filename(&session.title),
+            id_prefix,
+            ext
+        );
         zip.start_file(&filename, options)?;
         zip.write_all(content.as_bytes())?;
     }
