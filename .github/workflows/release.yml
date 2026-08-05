@@ -92,7 +92,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workdir: kiro-history/src-tauri
+          workspaces: kiro-history/src-tauri
           key: ${{ matrix.os }}
 
       # Frontend
