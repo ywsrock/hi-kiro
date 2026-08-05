@@ -178,6 +178,7 @@ pub fn run() {
             commands::prefetch_session,
             commands::get_model_prices_path,
             commands::reload_model_prices,
+            commands::get_model_prices,
             commands::search_sessions_cursor,
         ])
         .run(tauri::generate_context!())

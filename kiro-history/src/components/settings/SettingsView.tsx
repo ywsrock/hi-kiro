@@ -24,6 +24,8 @@ export function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [pricesPath, setPricesPath] = useState("");
   const [reloading, setReloading] = useState(false);
+  const [modelPrices, setModelPrices] = useState<Array<{ pattern: string; input: number; output: number; ctx: number }>>([]);
+  const [pricesUpdated, setPricesUpdated] = useState("");
   const [isWindows, setIsWindows] = useState(false);
 
   useEffect(() => {
@@ -32,6 +34,10 @@ export function SettingsView() {
 
     // 現在の設定を読み込み
     api.getModelPricesPath().then(setPricesPath).catch(console.error);
+    api.getModelPrices().then((cfg) => {
+      setModelPrices(cfg.models);
+      setPricesUpdated(cfg.last_updated);
+    }).catch(console.error);
     Promise.all([api.getConfig(), api.getCurrentPaths(), api.getIndexStats()])
       .then(([cfg, paths, s]) => {
         setSessionsDir(cfg.sessions_dir ?? "");
@@ -281,6 +287,9 @@ export function SettingsView() {
               setReloading(true);
               try {
                 const msg = await api.reloadModelPrices();
+                const cfg = await api.getModelPrices();
+                setModelPrices(cfg.models);
+                setPricesUpdated(cfg.last_updated);
                 toast.success(msg);
               } catch (e) {
                 toast.error(`エラー: ${e}`);
@@ -299,6 +308,45 @@ export function SettingsView() {
         <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
           ファイルを編集後、「価格を再読み込み」を押すと即時反映されます（再起動不要）
         </p>
+
+        {/* 現在の価格テーブル */}
+        {modelPrices.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+              現在の価格設定{pricesUpdated ? `（${pricesUpdated}）` : ""}
+            </p>
+            <div className="rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+              <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "var(--bg)", borderBottom: "1px solid var(--border)" }}>
+                    <th className="px-3 py-1.5 text-left font-medium" style={{ color: "var(--text-muted)" }}>パターン</th>
+                    <th className="px-3 py-1.5 text-right font-medium" style={{ color: "var(--text-muted)" }}>入力 $/MTok</th>
+                    <th className="px-3 py-1.5 text-right font-medium" style={{ color: "var(--text-muted)" }}>出力 $/MTok</th>
+                    <th className="px-3 py-1.5 text-right font-medium" style={{ color: "var(--text-muted)" }}>CTX</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modelPrices.map((m, i) => (
+                    <tr
+                      key={m.pattern}
+                      style={{
+                        borderBottom: i < modelPrices.length - 1 ? "1px solid var(--border)" : "none",
+                        background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+                      }}
+                    >
+                      <td className="px-3 py-1.5 font-mono" style={{ color: "var(--accent)" }}>{m.pattern}</td>
+                      <td className="px-3 py-1.5 text-right" style={{ color: "var(--text-primary)" }}>${m.input}</td>
+                      <td className="px-3 py-1.5 text-right" style={{ color: "var(--text-primary)" }}>${m.output}</td>
+                      <td className="px-3 py-1.5 text-right" style={{ color: "var(--text-muted)" }}>
+                        {(m.ctx / 1000).toFixed(0)}K
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Index ── */}

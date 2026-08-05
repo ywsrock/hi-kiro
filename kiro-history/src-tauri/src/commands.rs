@@ -1009,6 +1009,12 @@ pub fn get_model_prices_path() -> String {
         .to_string()
 }
 
+/// 現在のモデル価格設定を返す
+#[tauri::command]
+pub fn get_model_prices() -> Result<crate::model_prices::ModelPricesConfig, String> {
+    Ok(crate::model_prices::load())
+}
+
 /// モデル価格設定をリロード（再起動不要で反映）
 #[tauri::command]
 pub fn reload_model_prices() -> Result<String, String> {
