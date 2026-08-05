@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['18', '20', '22']
+        node: ['20', '22']
         os: [ubuntu-22.04, windows-latest]
         # To add macOS: uncomment below
         # os: [ubuntu-22.04, windows-latest, macos-latest]
