@@ -172,6 +172,7 @@ pub fn run() {
             commands::detect_wsl_paths,
             commands::get_current_paths,
             commands::prefetch_session,
+            commands::search_sessions_cursor,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

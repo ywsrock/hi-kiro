@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "../../context/AppContext";
 import { SearchBar } from "../search/SearchBar";
@@ -27,7 +27,10 @@ export function SearchView() {
   const [filters, setFilters] = useState<FilterParams>({});
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const cursorRef = useRef<number | undefined>(undefined); // カーソル（最後のupdated_at）
 
   // Derive available models from sessions (no extra state)
   const availableModels = useMemo(
@@ -38,16 +41,47 @@ export function SearchView() {
 
   const debouncedQuery = useDebounce(query, 150);
 
+  const INITIAL_LIMIT = 100; // 初回は100件（500→100 に削減）
+
   const loadSessions = useCallback(async () => {
     try {
-      const results = await api.searchSessions(debouncedQuery, 500, filters);
+      cursorRef.current = undefined;
+      const results = await api.searchSessionsCursor({
+        query: debouncedQuery,
+        limit: INITIAL_LIMIT,
+        filters,
+        before_updated_at: undefined,
+      });
       setSessions(results);
+      setHasMore(results.length === INITIAL_LIMIT);
+      cursorRef.current = results[results.length - 1]?.updated_at;
       setLoading(false);
     } catch (e) {
       console.error("Search failed:", e);
       setLoading(false);
     }
   }, [debouncedQuery, filters]);
+
+  // カーソルベースで追加読み込み
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || cursorRef.current == null) return;
+    setLoadingMore(true);
+    try {
+      const more = await api.searchSessionsCursor({
+        query: debouncedQuery,
+        limit: INITIAL_LIMIT,
+        filters,
+        before_updated_at: cursorRef.current,
+      });
+      setSessions((prev) => [...prev, ...more]);
+      setHasMore(more.length === INITIAL_LIMIT);
+      cursorRef.current = more[more.length - 1]?.updated_at;
+    } catch (e) {
+      console.error("loadMore failed:", e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [debouncedQuery, filters, loadingMore, hasMore]);
 
   useEffect(() => {
     loadSessions();
@@ -149,6 +183,8 @@ export function SearchView() {
             onDeleteMultiple={handleDeleteMultiple}
             onRename={handleRename}
             loading={loading}
+            onLoadMore={loadMore}
+            loadingMore={loadingMore}
           />
         </div>
 

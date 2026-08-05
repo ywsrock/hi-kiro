@@ -164,6 +164,13 @@ export const api = {
       "get_current_paths"
     ),
 
+  searchSessionsCursor: (params: {
+    query: string;
+    limit?: number;
+    filters?: import("./types").FilterParams;
+    before_updated_at?: number;
+  }) => invoke<import("./types").SessionSummary[]>("search_sessions_cursor", { params }),
+
   // ── プリフェッチ ──────────────────────────────────────────────────────────────
   prefetchSession: (sessionId: string) =>
     invoke<void>("prefetch_session", { sessionId }),

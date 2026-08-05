@@ -2,13 +2,22 @@ use serde::{Deserialize, Serialize};
 
 // ── Search / Filter ──────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct FilterParams {
     pub date_from: Option<i64>,
     pub date_to: Option<i64>,
     pub model_name: Option<String>,
     pub tags: Option<Vec<String>>,
     pub starred_only: Option<bool>,
+}
+
+/// カーソルベースページネーション
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct CursorParams {
+    pub query: String,
+    pub limit: Option<u32>,
+    pub filters: Option<FilterParams>,
+    pub before_updated_at: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

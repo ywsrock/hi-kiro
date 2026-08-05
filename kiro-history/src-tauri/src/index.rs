@@ -20,6 +20,20 @@ pub fn open_index_db(db_path: &Path) -> Result<Connection> {
         std::fs::create_dir_all(parent)?;
     }
     let conn = Connection::open(db_path)?;
+
+    // パフォーマンスチューニング (init_schema より前に設定)
+    // WAL: 読み書きを並行化（インデックス更新中でも検索可能）
+    // NORMAL: WAL使用時はFULLでなくNORMALで十分安全
+    // cache_size: 64MB のページキャッシュ（負値=KB）
+    // mmap_size: 256MB メモリマップ読み込み
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL;
+         PRAGMA synchronous = NORMAL;
+         PRAGMA cache_size = -65536;
+         PRAGMA mmap_size = 268435456;
+         PRAGMA temp_store = MEMORY;",
+    )?;
+
     init_schema(&conn)?;
     Ok(conn)
 }

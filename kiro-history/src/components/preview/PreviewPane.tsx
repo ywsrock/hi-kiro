@@ -186,6 +186,20 @@ function MessageBubble({ role, content }: { role: "User" | "Kiro"; content: stri
   const [showCopy, setShowCopy] = useState(false);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  // IntersectionObserver による遅延ハイライト
+  // ビューポートに入ってから初めてrehypeHighlightを有効化
+  const [visible, setVisible] = useState(false);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = bubbleRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
+      { rootMargin: "200px" } // 200px手前からプリロード
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const copyAs = async (asMarkdown: boolean) => {
     let text = content;
@@ -207,6 +221,7 @@ function MessageBubble({ role, content }: { role: "User" | "Kiro"; content: stri
 
   return (
     <div
+      ref={bubbleRef}
       className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4 group`}
       onMouseEnter={() => setShowCopy(true)}
       onMouseLeave={() => { setShowCopy(false); setOpen(false); }}
@@ -276,7 +291,7 @@ function MessageBubble({ role, content }: { role: "User" | "Kiro"; content: stri
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+              rehypePlugins={visible ? [[rehypeHighlight, { detect: true, ignoreMissing: true }]] : []}
               components={{
                 pre: ({ children, ...props }) => {
                   const codeEl = (children as React.ReactElement)?.props;
