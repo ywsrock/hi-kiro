@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::RwLock;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppConfig {
@@ -39,6 +40,8 @@ pub struct AppState {
     /// コピー元のmtime と一致している間はキャッシュを使い回す
     #[allow(dead_code)]
     pub sqlite_tmp_cache: Option<(PathBuf, std::time::SystemTime)>,
+    /// モデル価格設定キャッシュ（再読み込みで更新可能）
+    pub model_prices: RwLock<crate::model_prices::ModelPricesConfig>,
 }
 
 impl AppState {
@@ -57,6 +60,7 @@ impl AppState {
             config,
             session_cache: LruCache::new(NonZeroUsize::new(SESSION_CACHE_CAPACITY).unwrap()),
             sqlite_tmp_cache: None,
+            model_prices: RwLock::new(crate::model_prices::load()),
         }
     }
 }

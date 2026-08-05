@@ -413,7 +413,10 @@ pub fn restore_session(conn: &Connection, session_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn get_stats(conn: &Connection) -> Result<StatsData> {
+pub fn get_stats(
+    conn: &Connection,
+    prices: &crate::model_prices::ModelPricesConfig,
+) -> Result<StatsData> {
     // ── Core ──────────────────────────────────────────────────────────────────
     let total_sessions: i64 =
         conn.query_row("SELECT COUNT(*) FROM sessions_meta", [], |r| r.get(0))?;
@@ -441,7 +444,8 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
     let cost_breakdown: Vec<crate::types::CostBreakdown> = sessions_by_model_raw
         .iter()
         .map(|(model, _cnt, _dur)| {
-            let (input_price, output_price, context_window) = model_pricing(model);
+            let (input_price, output_price, context_window) =
+                crate::model_prices::get_price(prices, model);
             // Estimate: avg context 15%, 70% input / 30% output split
             let avg_ctx_pct = 0.15f64;
             let est_total_tokens = (avg_ctx_pct * context_window as f64) as i64 * _cnt;
@@ -629,15 +633,6 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
         total_est_cost_usd: (total_est_cost_usd * 100.0).round() / 100.0,
         est_tokens_total,
     })
-}
-
-/// Return (input_price_per_mtok, output_price_per_mtok, context_window) for a model.
-/// モデル価格テーブル（入力$/1M tokens, 出力$/1M tokens, コンテキストウィンドウ）
-/// 価格は ~/.local/share/hi-kiro/model_prices.json から読み込みます。
-/// ファイルが存在しない場合は constants.rs のデフォルト値を使用します。
-fn model_pricing(model: &str) -> (f64, f64, u64) {
-    let config = crate::model_prices::load();
-    crate::model_prices::get_price(&config, model)
 }
 
 // ── Tag Metadata CRUD ─────────────────────────────────────────────────────────
