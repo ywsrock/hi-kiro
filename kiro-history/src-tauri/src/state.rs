@@ -1,6 +1,9 @@
+use lru::LruCache;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppConfig {
@@ -20,6 +23,9 @@ impl Default for AppConfig {
 }
 
 /// Shared application state managed by Tauri.
+/// セッションキャッシュ容量
+const SESSION_CACHE_CAPACITY: usize = 50;
+
 pub struct AppState {
     pub index_conn: Connection,
     pub index_db_path: PathBuf,
@@ -27,6 +33,8 @@ pub struct AppState {
     pub sqlite_db_path: PathBuf,
     #[allow(dead_code)]
     pub config: AppConfig,
+    /// 直近開いたセッションのメモリキャッシュ (LRU, 最大50件)
+    pub session_cache: LruCache<String, Arc<crate::models::Session>>,
 }
 
 impl AppState {
@@ -43,6 +51,7 @@ impl AppState {
             sessions_dir,
             sqlite_db_path,
             config,
+            session_cache: LruCache::new(NonZeroUsize::new(SESSION_CACHE_CAPACITY).unwrap()),
         }
     }
 }

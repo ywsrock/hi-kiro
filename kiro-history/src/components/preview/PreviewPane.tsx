@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -114,6 +115,68 @@ function CopyDropdown({ content }: { content: string }) {
             </button>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// 仮想化メッセージリスト（スクロールコンテナ込み）
+function VirtualMessageList({
+  messages,
+  scrollRef,
+}: {
+  messages: Array<{ role: string; content: string }>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const virtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => scrollRef.current as HTMLDivElement | null,
+    estimateSize: useCallback((i: number) => {
+      const len = messages[i]?.content?.length ?? 0;
+      return Math.max(80, Math.min(800, 80 + Math.floor(len / 80) * 20));
+    }, [messages]),
+    overscan: 3,
+  });
+
+  const items = virtualizer.getVirtualItems();
+
+  return (
+    <div
+      ref={scrollRef as React.RefObject<HTMLDivElement>}
+      className="flex-1 overflow-auto px-4 py-4"
+    >
+      {messages.length === 0 ? (
+        <p className="text-sm text-center mt-8" style={{ color: "var(--text-muted)" }}>
+          No messages
+        </p>
+      ) : (
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          {items.map((item) => {
+            const msg = messages[item.index];
+            return (
+              <div
+                key={item.key}
+                data-index={item.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${item.start}px)`,
+                }}
+              >
+                <MessageBubble role={msg.role as "User" | "Kiro"} content={msg.content} />
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -427,7 +490,7 @@ export function PreviewPane({ sessionId, onSelectSession }: PreviewPaneProps) {
   const [tags, setTags] = useState<string[]>([]);
   const [showRelated, setShowRelated] = useState(false);
   const [viewMode, setViewMode] = useState<"all" | "user" | "kiro">("all");
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!sessionId) {
@@ -564,18 +627,11 @@ export function PreviewPane({ sessionId, onSelectSession }: PreviewPaneProps) {
         </div>
       </div>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-auto px-4 py-4">
-        {filteredMessages.length === 0 ? (
-          <p className="text-sm text-center mt-8" style={{ color: "var(--text-muted)" }}>
-            No messages
-          </p>
-        ) : (
-          filteredMessages.map((msg, i) => (
-            <MessageBubble key={i} role={msg.role as "User" | "Kiro"} content={msg.content} />
-          ))
-        )}
-      </div>
+      {/* Messages - 仮想化スクロール（scrollRef はコンポーネント内でスクロールコンテナを兼ねる） */}
+      <VirtualMessageList
+        messages={filteredMessages}
+        scrollRef={scrollRef}
+      />
 
       {/* Related sessions */}
       {related.length > 0 && (
