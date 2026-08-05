@@ -24,6 +24,7 @@ pub fn search_sessions(
             "m.session_id IN (SELECT session_id FROM sessions_fts WHERE sessions_fts MATCH ?1)"
                 .to_string(),
         );
+        // 単語ごとに "word"* でクオートしてAND連結（FTS5特殊文字対策）
         let fts_query = query
             .split_whitespace()
             .filter(|w| !w.is_empty())
@@ -524,15 +525,18 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
 }
 
 /// Return (input_price_per_mtok, output_price_per_mtok, context_window) for a model.
+/// モデル価格テーブル（入力$/1M tokens, 出力$/1M tokens, コンテキストウィンドウ）
+/// 最終更新: 2025-08 (Anthropic公式価格に基づく)
+/// 価格改定時はこの関数を更新してください
+/// 参考: https://www.anthropic.com/pricing
 fn model_pricing(model: &str) -> (f64, f64, u64) {
     let m = model.to_lowercase();
     if m.contains("opus") {
-        (15.0, 75.0, 200_000)
+        (15.0, 75.0, 200_000) // Claude 3 Opus
     } else if m.contains("haiku") {
-        (0.8, 4.0, 200_000)
+        (0.8, 4.0, 200_000) // Claude 3 Haiku
     } else {
-        // sonnet pricing as default
-        (3.0, 15.0, 200_000)
+        (3.0, 15.0, 200_000) // Claude 3 Sonnet (default)
     }
 }
 
@@ -644,10 +648,15 @@ pub fn update_tag(conn: &Connection, tag: &str, color: &str, description: &str) 
 
 pub fn delete_tag_full(conn: &Connection, tag: &str) -> Result<usize> {
     // Remove from all sessions
-    let mut stmt = conn.prepare("SELECT session_id, tags FROM user_data WHERE tags LIKE ?1")?;
-    let pattern = format!("%{}%", tag);
+    // json_each で完全一致検索（LIKE %tag% は部分一致で誤ヒットする）
+    let mut stmt = conn.prepare(
+        "SELECT session_id, tags FROM user_data WHERE session_id IN (
+             SELECT session_id FROM user_data, json_each(user_data.tags)
+             WHERE json_each.value = ?1
+         )",
+    )?;
     let rows: Vec<(String, String)> = stmt
-        .query_map(rusqlite::params![pattern], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .query_map(rusqlite::params![tag], |r| Ok((r.get(0)?, r.get(1)?)))?
         .flatten()
         .collect();
 
@@ -681,11 +690,15 @@ pub fn rename_tag(conn: &Connection, old_tag: &str, new_tag: &str) -> Result<usi
     let new_tag = new_tag.trim().trim_start_matches('#');
     let new_tag = format!("#{}", new_tag);
 
-    // Update all sessions
-    let mut stmt = conn.prepare("SELECT session_id, tags FROM user_data WHERE tags LIKE ?1")?;
-    let pattern = format!("%{}%", old_tag);
+    // json_each で完全一致検索
+    let mut stmt = conn.prepare(
+        "SELECT session_id, tags FROM user_data WHERE session_id IN (
+             SELECT session_id FROM user_data, json_each(user_data.tags)
+             WHERE json_each.value = ?1
+         )",
+    )?;
     let rows: Vec<(String, String)> = stmt
-        .query_map(rusqlite::params![pattern], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .query_map(rusqlite::params![old_tag], |r| Ok((r.get(0)?, r.get(1)?)))?
         .flatten()
         .collect();
 
@@ -723,11 +736,15 @@ pub fn rename_tag(conn: &Connection, old_tag: &str, new_tag: &str) -> Result<usi
 }
 
 pub fn merge_tags(conn: &Connection, from_tag: &str, to_tag: &str) -> Result<usize> {
-    // Add to_tag to all sessions that have from_tag
-    let mut stmt = conn.prepare("SELECT session_id, tags FROM user_data WHERE tags LIKE ?1")?;
-    let pattern = format!("%{}%", from_tag);
+    // json_each で完全一致検索
+    let mut stmt = conn.prepare(
+        "SELECT session_id, tags FROM user_data WHERE session_id IN (
+             SELECT session_id FROM user_data, json_each(user_data.tags)
+             WHERE json_each.value = ?1
+         )",
+    )?;
     let rows: Vec<(String, String)> = stmt
-        .query_map(rusqlite::params![pattern], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .query_map(rusqlite::params![from_tag], |r| Ok((r.get(0)?, r.get(1)?)))?
         .flatten()
         .collect();
 
