@@ -224,16 +224,21 @@ pub fn resume_session(session_id: String, cwd: String) -> Result<(), String> {
 
         if is_wsl {
             // Try Windows Terminal first (wt.exe)
-            let wt_paths = [
-                // User-installed Windows Terminal
-                dirs::home_dir()
-                    .map(|h| h.join("msHome/AppData/Local/Microsoft/WindowsApps/wt.exe"))
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_default(),
-                "/mnt/c/Users/wenyan/AppData/Local/Microsoft/WindowsApps/wt.exe".to_string(),
-                // System-wide
-                "/mnt/c/Program Files/WindowsApps/Microsoft.WindowsTerminal_1.18.3181.0_x64__8wekyb3d8bbwe/wt.exe".to_string(),
-            ];
+            // /mnt/c/Users/<user>/AppData/Local/Microsoft/WindowsApps/wt.exe を動的に検索
+            let mut wt_paths: Vec<String> = Vec::new();
+
+            // /mnt/c/Users/ 以下を走査してwt.exeを探す
+            if let Ok(users) = std::fs::read_dir("/mnt/c/Users") {
+                for user_entry in users.flatten() {
+                    let wt = user_entry
+                        .path()
+                        .join("AppData/Local/Microsoft/WindowsApps/wt.exe");
+                    wt_paths.push(wt.to_string_lossy().to_string());
+                }
+            }
+            // PATH上のwt.exeを試みる（Windowsの環境変数PATH経由）
+            wt_paths.push("wt.exe".to_string());
+            let wt_paths = wt_paths;
 
             let cwd_linux = cwd_path.to_string_lossy().to_string();
 
@@ -492,23 +497,36 @@ fn delete_sqlite_session(session_id: &str, sqlite_db_path: &std::path::Path) -> 
 
     if affected == 0 {
         // Try conversations (v1: key=cwd, value contains conversation_id)
-        // Find and delete rows where value JSON contains this conversation_id
+        // conversation_idキーまで含めたパターンで誤ヒットを防ぐ
         let mut stmt = conn
-            .prepare("SELECT key FROM conversations WHERE value LIKE ?1")
+            .prepare("SELECT key, value FROM conversations WHERE value LIKE ?1")
             .map_err(|e| format!("クエリエラー: {}", e))?;
-        let pattern = format!("%\"{}\"% ", session_id);
-        let keys: Vec<String> = stmt
-            .query_map(rusqlite::params![pattern], |r| r.get(0))
+        let pattern = format!("%\"conversation_id\":\"{}\"%", session_id);
+        let rows: Vec<(String, String)> = stmt
+            .query_map(rusqlite::params![pattern], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })
             .map_err(|e| format!("クエリエラー: {}", e))?
             .flatten()
             .collect();
 
-        for key in keys {
-            conn.execute(
-                "DELETE FROM conversations WHERE key = ?1",
-                rusqlite::params![key],
-            )
-            .map_err(|e| format!("削除エラー: {}", e))?;
+        let mut deleted_v1 = 0usize;
+        for (key, value) in rows {
+            // conversation_idが一致するか確認してから削除（誤マッチ防止）
+            let data: serde_json::Value = serde_json::from_str(&value).unwrap_or_default();
+            if data["conversation_id"].as_str() == Some(session_id.trim()) {
+                conn.execute(
+                    "DELETE FROM conversations WHERE key = ?1",
+                    rusqlite::params![key],
+                )
+                .map_err(|e| format!("削除エラー: {}", e))?;
+                deleted_v1 += 1;
+            }
+        }
+
+        if deleted_v1 == 0 {
+            // v1にも見つからない場合は警告を返す
+            return Err(format!("セッションが見つかりません: {}", session_id));
         }
     }
 
