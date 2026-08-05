@@ -284,9 +284,19 @@ mod tests {
     #[test]
     fn test_wsl_unc_path_slash_to_backslash() {
         let path = wsl_unc_path("wsl$", "Ubuntu", "/home/user/test");
-        let s = path.to_string_lossy();
-        // Linuxパスのスラッシュがバックスラッシュに変換されること
-        assert!(!s.contains("//"));
+        let s = path.to_string_lossy().to_string();
+        // パスにdistro/ディレクトリ名が含まれること
+        assert!(s.contains("Ubuntu"), "distro name should be in path: {}", s);
+        assert!(s.contains("home"), "home dir should be in path: {}", s);
+        assert!(s.contains("user"), "user dir should be in path: {}", s);
+        assert!(s.contains("test"), "leaf dir should be in path: {}", s);
+        // wsl$プレフィックスを除いた部分にforwardスラッシュが残っていないこと
+        let without_prefix = s.replace(r"\\wsl$\", "").replace(r"\\wsl.localhost\", "");
+        assert!(
+            !without_prefix.contains('/'),
+            "forward slashes should be converted to backslashes: {}",
+            s
+        );
     }
 
     #[test]

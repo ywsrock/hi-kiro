@@ -30,7 +30,9 @@ pub fn run() {
                     },
                 ))
                 .max_file_size(crate::constants::LOG_MAX_FILE_SIZE)
-                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(
+                    crate::constants::LOG_MAX_FILES,
+                ))
                 .level(log::LevelFilter::Info)
                 .build(),
         )

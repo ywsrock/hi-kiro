@@ -117,10 +117,11 @@ fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSummary> {
         max_context_pct: row.get(8)?,
         total_tool_uses: row.get(9)?,
         total_cycles: row.get(10)?,
+        // NULLの場合のみ0、型不整合等の想定外エラーは?で伝播させる
         total_duration_secs: row
-            .get::<_, f64>(11)
+            .get::<_, Option<f64>>(11)?
             .map(|v| v as i64)
-            .or_else(|_| row.get::<_, i64>(11))
+            .or_else(|| row.get::<_, Option<i64>>(11).ok().flatten())
             .unwrap_or(0),
         starred: row.get::<_, i32>(12)? != 0,
         tags,
