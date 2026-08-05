@@ -634,19 +634,47 @@ pub fn get_stats(conn: &Connection) -> Result<StatsData> {
 /// Return (input_price_per_mtok, output_price_per_mtok, context_window) for a model.
 /// モデル価格テーブル（入力$/1M tokens, 出力$/1M tokens, コンテキストウィンドウ）
 /// 価格定数は constants.rs で管理しています。価格改定時は constants.rs を更新してください。
+/// 参考: https://www.anthropic.com/pricing
 fn model_pricing(model: &str) -> (f64, f64, u64) {
-    use crate::constants::{
-        CTX_HAIKU, CTX_OPUS, CTX_SONNET, PRICE_HAIKU_INPUT, PRICE_HAIKU_OUTPUT, PRICE_OPUS_INPUT,
-        PRICE_OPUS_OUTPUT, PRICE_SONNET_INPUT, PRICE_SONNET_OUTPUT,
-    };
+    use crate::constants::*;
     let m = model.to_lowercase();
-    if m.contains("opus") {
-        (PRICE_OPUS_INPUT, PRICE_OPUS_OUTPUT, CTX_OPUS)
-    } else if m.contains("haiku") {
-        (PRICE_HAIKU_INPUT, PRICE_HAIKU_OUTPUT, CTX_HAIKU)
-    } else {
-        (PRICE_SONNET_INPUT, PRICE_SONNET_OUTPUT, CTX_SONNET) // Sonnet as default
+
+    // Fable系（最上位・次世代エージェント）
+    if m.contains("fable") {
+        return (PRICE_FABLE_5_INPUT, PRICE_FABLE_5_OUTPUT, CTX_STANDARD);
     }
+    // Opus系
+    if m.contains("opus") {
+        if m.contains("-5") || m.contains("opus-5") {
+            return (PRICE_OPUS_5_INPUT, PRICE_OPUS_5_OUTPUT, CTX_STANDARD);
+        }
+        if m.contains("4-1") || m.contains("4.1") {
+            return (PRICE_OPUS_41_INPUT, PRICE_OPUS_41_OUTPUT, CTX_STANDARD);
+        }
+        if m.contains("-4") || m.contains("opus-4") {
+            return (PRICE_OPUS_4_INPUT, PRICE_OPUS_4_OUTPUT, CTX_STANDARD);
+        }
+        return (PRICE_OPUS_3_INPUT, PRICE_OPUS_3_OUTPUT, CTX_STANDARD);
+    }
+    // Sonnet系
+    if m.contains("sonnet") {
+        if m.contains("-5") || m.contains("sonnet-5") {
+            return (PRICE_SONNET_5_INPUT, PRICE_SONNET_5_OUTPUT, CTX_STANDARD);
+        }
+        if m.contains("-4") || m.contains("sonnet-4") {
+            return (PRICE_SONNET_4_INPUT, PRICE_SONNET_4_OUTPUT, CTX_STANDARD);
+        }
+        return (PRICE_SONNET_3_INPUT, PRICE_SONNET_3_OUTPUT, CTX_STANDARD);
+    }
+    // Haiku系
+    if m.contains("haiku") {
+        if m.contains("4-5") || m.contains("4.5") || m.contains("-4") {
+            return (PRICE_HAIKU_45_INPUT, PRICE_HAIKU_45_OUTPUT, CTX_STANDARD);
+        }
+        return (PRICE_HAIKU_3_INPUT, PRICE_HAIKU_3_OUTPUT, CTX_STANDARD);
+    }
+    // デフォルト: Sonnet 4相当
+    (PRICE_SONNET_4_INPUT, PRICE_SONNET_4_OUTPUT, CTX_STANDARD)
 }
 
 // ── Tag Metadata CRUD ─────────────────────────────────────────────────────────
