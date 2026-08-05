@@ -1168,7 +1168,6 @@ pub fn suggest_tags(conn: &Connection, session_id: &str) -> Result<Vec<String>> 
 mod tests {
     use super::*;
     use rusqlite::Connection;
-    use std::io::Write;
 
     #[test]
     fn test_json1_available() {
