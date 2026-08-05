@@ -17,3 +17,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+*.deb
+*.rpm
+*.AppImage
