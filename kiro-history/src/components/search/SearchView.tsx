@@ -206,7 +206,11 @@ export function SearchView() {
 
         {/* Right pane */}
         <div className="flex-1 flex overflow-hidden">
-          <PreviewPane sessionId={selectedSessionId} onSelectSession={setSelectedSessionId} />
+          <PreviewPane
+            sessionId={selectedSessionId}
+            onSelectSession={setSelectedSessionId}
+            onRename={handleRename}
+          />
         </div>
       </div>
     </>

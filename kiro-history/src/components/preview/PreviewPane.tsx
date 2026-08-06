@@ -40,6 +40,7 @@ import { api } from "../../api";
 interface PreviewPaneProps {
   sessionId: string | null;
   onSelectSession?: (id: string) => void;
+  onRename?: (id: string, newTitle: string) => void;
 }
 
 // CopyButton helper (used inline below)
@@ -503,7 +504,7 @@ function TagSuggestions({ sessionId, currentTags, onAdd }: {
   );
 }
 
-export function PreviewPane({ sessionId, onSelectSession }: PreviewPaneProps) {
+export function PreviewPane({ sessionId, onSelectSession, onRename }: PreviewPaneProps) {
   const toast = useToast();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [related, setRelated] = useState<SessionSummary[]>([]);
@@ -592,6 +593,8 @@ export function PreviewPane({ sessionId, onSelectSession }: PreviewPaneProps) {
           title={summary.title || "Untitled"}
           onRename={(newTitle) => {
             if (detail) setDetail({ ...detail, summary: { ...detail.summary, title: newTitle } });
+            // セッションリスト側にも反映
+            if (sessionId) onRename?.(sessionId, newTitle);
           }}
         />
         <div className="flex items-center gap-3 text-xs flex-wrap" style={{ color: "var(--text-muted)" }}>
