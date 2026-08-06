@@ -37,6 +37,16 @@ export function SnippetsView() {
 
   // Save modal state
   const [saveModal, setSaveModal] = useState<CodeSnippetWithSession | null>(null);
+  const [previewModal, setPreviewModal] = useState<CodeSnippetWithSession | null>(null);
+
+  // Escape キーでプレビューモーダルを閉じる
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPreviewModal(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const debouncedQuery = useDebounce(query, 200);
 
@@ -244,13 +254,102 @@ export function SnippetsView() {
                   <SessionSnippetCard key={i} snippet={s} view={view}
                     isSelected={selectedId === `all-${i}`}
                     onSelect={() => setSelectedId(selectedId === `all-${i}` ? null : `all-${i}`)}
-                    onSave={() => setSaveModal(s)} />
+                    onSave={() => setSaveModal(s)}
+                    onPreview={() => setPreviewModal(s)} />
                 ))}
               </div>
             )}
           </>
         )}
       </div>
+
+      {/* Code Preview Modal */}
+      {previewModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setPreviewModal(null)}
+        >
+          <div
+            className="rounded-xl shadow-2xl flex flex-col"
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              width: "min(760px, 92vw)",
+              maxHeight: "80vh",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 py-3.5 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
+              <span
+                className="text-xs font-mono font-semibold px-2 py-1 rounded"
+                style={{ background: `${langColor(previewModal.language)}18`, color: langColor(previewModal.language) }}
+              >
+                {previewModal.language}
+              </span>
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+                  {inferSnippetTitle(previewModal.language, previewModal.code)}
+                </span>
+                <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
+                  {previewModal.session_title}
+                </span>
+              </div>
+              <button
+                onClick={() => setPreviewModal(null)}
+                className="p-1.5 rounded cursor-pointer flex-shrink-0"
+                style={{ color: "var(--text-muted)" }}
+                title="閉じる (Esc)"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Code */}
+            <div className="flex-1 overflow-auto" style={{ minHeight: 0 }}>
+              <pre
+                className="px-5 py-4 text-xs leading-relaxed"
+                style={{
+                  color: "var(--text-primary)",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  margin: 0,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                }}
+              >
+                {previewModal.code}
+              </pre>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-5 py-3 flex-shrink-0" style={{ borderTop: "1px solid var(--border)" }}>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                {previewModal.code.split("\n").length} 行 · {previewModal.code.length} 文字
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    await api.copyToClipboard(previewModal.code);
+                    toast.success("コピーしました");
+                  }}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded cursor-pointer"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                >
+                  <Copy size={13} /> コピー
+                </button>
+                <button
+                  onClick={() => { setSaveModal(previewModal); setPreviewModal(null); }}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded cursor-pointer font-medium"
+                  style={{ background: "var(--accent)", color: "#000" }}
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Save Modal */}
       {saveModal && (
@@ -291,8 +390,9 @@ interface SessionSnippetCardProps {
   isSelected: boolean;
   onSelect: () => void;
   onSave: () => void;
+  onPreview: () => void;
 }
-function SessionSnippetCard({ snippet: s, view, isSelected, onSelect, onSave }: SessionSnippetCardProps) {
+function SessionSnippetCard({ snippet: s, view, isSelected, onSelect, onSave, onPreview }: SessionSnippetCardProps) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
   const color = langColor(s.language);
@@ -313,10 +413,9 @@ function SessionSnippetCard({ snippet: s, view, isSelected, onSelect, onSave }: 
         <span className="text-xs font-mono px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: `${color}15`, color }}>{s.language}</span>
         <div className="flex flex-col min-w-0 flex-1">
           <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>{inferSnippetTitle(s.language, s.code)}</span>
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs truncate font-medium" style={{ color: "var(--text-secondary)" }}>{inferSnippetTitle(s.language, s.code)}</span>
-            <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.session_title}</span>
-          </div>
+          <span className="text-xs truncate font-medium" style={{ color: "var(--text-secondary)" }} title={s.session_title}>
+            {inferSnippetTitle(s.language, s.code)}
+          </span>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
           <button onClick={(e) => { e.stopPropagation(); onSave(); }}
@@ -331,15 +430,14 @@ function SessionSnippetCard({ snippet: s, view, isSelected, onSelect, onSave }: 
   }
 
   return (
-    <div onClick={onSelect} className="rounded-xl overflow-hidden cursor-pointer group flex flex-col"
+    <div onClick={onPreview} className="rounded-xl overflow-hidden cursor-pointer group flex flex-col"
       style={{ background: "var(--surface)", border: isSelected ? "1px solid rgba(34,197,94,0.5)" : "1px solid var(--border)", transition: "border-color 0.15s" }}>
       <div className="flex items-center justify-between px-3 py-2.5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs px-2 py-0.5 rounded font-mono font-semibold flex-shrink-0" style={{ background: `${color}18`, color }}>{s.language}</span>
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs truncate font-medium" style={{ color: "var(--text-secondary)" }}>{inferSnippetTitle(s.language, s.code)}</span>
-            <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.session_title}</span>
-          </div>
+          <span className="text-xs truncate font-medium" style={{ color: "var(--text-secondary)" }} title={s.session_title}>
+            {inferSnippetTitle(s.language, s.code)}
+          </span>
         </div>
       </div>
       <pre className="px-3 py-2.5 text-xs overflow-hidden flex-1"
