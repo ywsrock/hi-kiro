@@ -406,8 +406,10 @@ export function SettingsView() {
         </p>
         <button
           onClick={async () => {
-            const ok = await api.confirmDelete(
-              "hi-kiro を終了しますか？\nトレイからも削除されます。"
+            const { confirm: confirmDialog } = await import("@tauri-apps/plugin-dialog");
+            const ok = await confirmDialog(
+              "アプリを完全に終了します。\nトレイからも削除されます。",
+              { title: "hi-kiro を終了", kind: "warning", okLabel: "終了", cancelLabel: "キャンセル" }
             );
             if (ok) {
               await exit(0);
