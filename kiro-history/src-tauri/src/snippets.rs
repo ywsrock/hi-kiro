@@ -365,10 +365,53 @@ pub fn suggest_snippet_title(language: &str, code: &str) -> String {
         _ => {}
     }
 
-    // Fallback: first non-empty line truncated
-    let truncated: String = first.chars().take(50).collect();
-    if truncated.len() < first.len() {
+    // 言語マッチ失敗時: コードらしい行を探して意味あるタイトルを生成
+    // 指示文（自然言語）を除外してコードの特徴的な行を優先する
+    let code_line = lines.iter().find(|line| {
+        let t = line.trim();
+        // 指示文パターンを除外
+        let is_instruction = t.ends_with('：')
+            || t.ends_with(':')
+            || t.ends_with("して")
+            || t.ends_with("する")
+            || t.ends_with("せよ")
+            || t.ends_with("ください")
+            || t.ends_with("通訳")
+            || t.ends_with("翻訳")
+            || t.ends_with("変換")
+            || t.ends_with("説明")
+            || (t
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == ' ' || c == '.' || c == ',' || c == '?')
+                && !t.contains('{')
+                && !t.contains('(')
+                && !t.contains('='));
+        // コードらしい特徴: 記号・括弧・演算子を含む
+        let has_code_chars = t.contains('(')
+            || t.contains('{')
+            || t.contains('=')
+            || t.contains(';')
+            || t.starts_with('#')
+            || t.starts_with("//")
+            || t.starts_with("def ")
+            || t.starts_with("fn ")
+            || t.starts_with("function ")
+            || t.starts_with("class ")
+            || t.starts_with("import ")
+            || t.starts_with("from ")
+            || t.starts_with("use ")
+            || t.starts_with("var ")
+            || t.starts_with("let ")
+            || t.starts_with("const ");
+        !is_instruction && (has_code_chars || t.len() > 5)
+    });
+
+    let best_line = code_line.unwrap_or(&first);
+    let truncated: String = best_line.trim().chars().take(50).collect();
+    if truncated.len() < best_line.trim().len() {
         format!("{}…", truncated)
+    } else if truncated.is_empty() {
+        format!("{} snippet", language)
     } else {
         truncated
     }

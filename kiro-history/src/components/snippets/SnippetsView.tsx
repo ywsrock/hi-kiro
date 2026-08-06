@@ -267,6 +267,23 @@ export function SnippetsView() {
   );
 }
 
+// コードから意味あるタイトルを生成（指示文を除外してコードの特徴行を使う）
+function inferSnippetTitle(language: string, code: string): string {
+  const lines = code.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return `${language} snippet`;
+
+  // 指示文パターン（自然言語）を検出
+  const isInstruction = (line: string) =>
+    /[：:。]$/.test(line) ||
+    /(して|する|せよ|ください|通訳|翻訳|変換|説明|教えて|とは)/.test(line) ||
+    (!/[({=;]/.test(line) && line.length < 60);
+
+  // コードらしい行を優先
+  const codeLine = lines.find((l) => !isInstruction(l) && /[({=;#]|^(def |fn |function |class |import |from |use |const |let |var )/.test(l));
+  const best = codeLine ?? lines[0];
+  return best.length > 50 ? best.slice(0, 50) + "…" : best;
+}
+
 // ── Session snippet card (read-only, with Save button) ────────────────────────
 interface SessionSnippetCardProps {
   snippet: CodeSnippetWithSession;
@@ -294,7 +311,13 @@ function SessionSnippetCard({ snippet: s, view, isSelected, onSelect, onSave }: 
         style={{ background: isSelected ? "rgba(34,197,94,0.06)" : "transparent", border: isSelected ? "1px solid rgba(34,197,94,0.3)" : "1px solid var(--border)", marginBottom: "4px" }}>
         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
         <span className="text-xs font-mono px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: `${color}15`, color }}>{s.language}</span>
-        <span className="flex-1 text-sm truncate" style={{ color: "var(--text-secondary)" }}>{s.session_title}</span>
+        <div className="flex flex-col min-w-0 flex-1">
+          <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>{inferSnippetTitle(s.language, s.code)}</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs truncate font-medium" style={{ color: "var(--text-secondary)" }}>{inferSnippetTitle(s.language, s.code)}</span>
+            <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.session_title}</span>
+          </div>
+        </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
           <button onClick={(e) => { e.stopPropagation(); onSave(); }}
             className="flex items-center gap-1 text-xs px-2 py-1 rounded cursor-pointer"
@@ -313,7 +336,10 @@ function SessionSnippetCard({ snippet: s, view, isSelected, onSelect, onSave }: 
       <div className="flex items-center justify-between px-3 py-2.5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs px-2 py-0.5 rounded font-mono font-semibold flex-shrink-0" style={{ background: `${color}18`, color }}>{s.language}</span>
-          <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.session_title}</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs truncate font-medium" style={{ color: "var(--text-secondary)" }}>{inferSnippetTitle(s.language, s.code)}</span>
+            <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.session_title}</span>
+          </div>
         </div>
       </div>
       <pre className="px-3 py-2.5 text-xs overflow-hidden flex-1"
