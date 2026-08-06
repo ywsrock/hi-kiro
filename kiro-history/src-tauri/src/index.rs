@@ -21,6 +21,9 @@ pub fn open_index_db(db_path: &Path) -> Result<Connection> {
     }
     let conn = Connection::open(db_path)?;
 
+    // busy_timeout: 別接続が書き込み中でも最大5秒リトライ（database is locked 対策）
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+
     // パフォーマンスチューニング (init_schema より前に設定)
     // WAL: 読み書きを並行化（インデックス更新中でも検索可能）
     // NORMAL: WAL使用時はFULLでなくNORMALで十分安全

@@ -151,19 +151,19 @@ export function DashboardView() {
   const [durationView, setDurationView] = useState<"month" | "all">("all");
 
   useEffect(() => {
-    // 初回: stats がまだない場合は先に古い stats を取得して画面を表示し、その後 rebuild
-    const loadThenRebuild = async () => {
-      if (!stats) {
-        // 初回: キャッシュから即座に表示
-        try { const s = await api.getStats(); setStats(s); } catch { /* ignore */ }
-      }
-      // rebuild（総作業時間カードのみ「計算中」表示）
+    const run = async () => {
+      // まず rebuild（index.db の書き込みロック）
       setRebuilding(true);
       try { await api.rebuildIndex(); } catch { /* ignore */ }
       setRebuilding(false);
+      // rebuild 完了後に stats を取得（read-only なのでロック競合なし）
       try { const s = await api.getStats(); setStats(s); } catch { /* ignore */ }
     };
-    loadThenRebuild();
+    // 画面遷移直後にすぐ古い stats を取得して先に表示
+    api.getStats().then(setStats).catch(() => {});
+    // 並列ではなく少し遅延させて getStats が先に完了してから rebuild 開始
+    const timer = setTimeout(run, 200);
+    return () => clearTimeout(timer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 汎用週次集計（月曜始まり）
