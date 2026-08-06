@@ -51,7 +51,12 @@ function shortenCwd(cwd: string): string {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function SummaryCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
+function SummaryCard({
+  label, value, sub, accent, headerExtra,
+}: {
+  label: string; value: string; sub?: string; accent?: boolean;
+  headerExtra?: React.ReactNode;
+}) {
   return (
     <div
       className="rounded-xl p-4 flex flex-col gap-1"
@@ -60,13 +65,53 @@ function SummaryCard({ label, value, sub, accent }: { label: string; value: stri
         border: `1px solid ${accent ? "rgba(34,197,94,0.3)" : "var(--border)"}`,
       }}
     >
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
+      <div className="flex items-center justify-between gap-1">
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
+        {headerExtra}
+      </div>
       <p className="text-2xl font-bold" style={{ fontFamily: "'JetBrains Mono', monospace", color: accent ? ACCENT : "var(--text-primary)" }}>
         {value}
       </p>
       {sub && <p className="text-xs" style={{ color: "var(--text-muted)" }}>{sub}</p>}
     </div>
   );
+}
+
+// ── コンパクト版タブ（SummaryCard 内に収まるサイズ）──────────────────────────
+function CompactViewTabs({
+  value,
+  onChange,
+}: {
+  value: CalendarView;
+  onChange: (v: CalendarView) => void;
+}) {
+  return (
+    <div className="flex gap-0.5 flex-shrink-0">
+      {(["day", "week", "month"] as const).map((v) => (
+        <button
+          key={v}
+          onClick={(e) => { e.stopPropagation(); onChange(v); }}
+          className="px-1.5 py-0.5 rounded cursor-pointer"
+          style={{
+            fontSize: "10px",
+            background: value === v ? "var(--accent)" : "transparent",
+            color: value === v ? "#000" : "var(--text-muted)",
+            transition: "background 0.15s",
+          }}
+        >
+          {v === "day" ? "日" : v === "week" ? "週" : "月"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── ローカルタイムで "YYYY-MM-DD" を生成（UTC誤差回避）────────────────────────
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -145,6 +190,44 @@ export function DashboardView() {
   const durationWeekly = useMemo(() => aggregateByWeek(durationDailyBase), [durationDailyBase]);
   const durationMonthly = useMemo(() => aggregateByMonth(durationDailyBase), [durationDailyBase]);
 
+  // date → { count, duration_secs } のマップ（durationSummaryCard 用）
+  const dailyStatsMap = useMemo(() => {
+    const map = new Map<string, { count: number; duration_secs: number }>();
+    (stats?.sessions_by_date ?? []).forEach((d) => {
+      map.set(d.date, { count: d.count, duration_secs: 0 });
+    });
+    (stats?.duration_by_date ?? []).forEach((d) => {
+      const existing = map.get(d.date);
+      if (existing) existing.duration_secs = d.duration_secs;
+      else map.set(d.date, { count: 0, duration_secs: d.duration_secs });
+    });
+    return map;
+  }, [stats]);
+
+  // 選択期間（今日/今週/今月）の作業時間サマリー
+  const durationPeriod = useMemo(() => {
+    const today = toLocalDateStr(new Date());
+    const monday = new Date();
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const mondayStr = toLocalDateStr(monday);
+    const monthPrefix = today.slice(0, 7);
+
+    let totalSecs = 0;
+    let totalCount = 0;
+
+    dailyStatsMap.forEach((v, date) => {
+      const inRange =
+        durationView === "day" ? date === today
+        : durationView === "week" ? date >= mondayStr
+        : date.startsWith(monthPrefix);
+      if (inRange) {
+        totalSecs += v.duration_secs;
+        totalCount += v.count;
+      }
+    });
+    return { totalSecs, avgSecs: totalCount > 0 ? totalSecs / totalCount : 0 };
+  }, [dailyStatsMap, durationView]);
+
   if (!stats) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -202,7 +285,12 @@ export function DashboardView() {
         {/* ── Summary Cards ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard label="総セッション数" value={String(stats.total_sessions)} sub={`総${stats.total_messages}メッセージ`} />
-          <SummaryCard label="総作業時間" value={fmtDuration(stats.total_duration_secs)} sub={`平均 ${fmtDuration(Math.round(stats.avg_duration_secs))}/session`} />
+          <SummaryCard
+              label={durationView === "day" ? "本日の作業時間" : durationView === "week" ? "今週の作業時間" : "今月の作業時間"}
+              value={fmtDuration(durationPeriod.totalSecs)}
+              sub={`平均 ${fmtDuration(Math.round(durationPeriod.avgSecs))}/session`}
+              headerExtra={<CompactViewTabs value={durationView} onChange={setDurationView} />}
+            />
           <SummaryCard label="推定コスト" value={fmtCost(stats.total_est_cost_usd)} sub={`推定 ${fmtTokens(stats.est_tokens_total)} tokens`} accent />
           <SummaryCard label="AIエージェント率" value={`${(stats.agent_session_ratio * 100).toFixed(0)}%`} sub={`ツール使用 ${stats.total_tool_uses}回 / ${stats.total_cycles}ループ`} />
         </div>
