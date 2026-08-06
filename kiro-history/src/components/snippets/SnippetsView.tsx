@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Search, LayoutGrid, List, Star, Plus, BarChart2, X, Copy, Check, Download, Upload, Folder, FolderPlus } from "lucide-react";
+import { Search, LayoutGrid, List, Star, Plus, BarChart2, X, Copy, Check, Download, Upload, Folder, FolderPlus, Zap } from "lucide-react";
 import { api } from "../../api";
 import type { ExportItem, SnippetCollection } from "../../api";
 import { useToast } from "../ui/Toast";
@@ -366,6 +366,23 @@ export function SnippetsView() {
             ))}
           </div>
           <span className="text-xs flex-shrink-0" style={{ color: "var(--text-muted)" }}>{countLabel}</span>
+          {/* パレット起動ボタン */}
+          <button
+            onClick={async () => {
+              const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+              const palette = await WebviewWindow.getByLabel("quick-palette");
+              if (palette) {
+                const visible = await palette.isVisible();
+                if (visible) { await palette.hide(); }
+                else { await palette.center(); await palette.show(); await palette.setFocus(); }
+              }
+            }}
+            className="flex items-center gap-1.5 text-xs px-2 py-1 rounded cursor-pointer flex-shrink-0"
+            style={{ color: "var(--accent)", border: "1px solid var(--border)" }}
+            title="スニペット検索パレット"
+          >
+            <Zap size={11} /> パレット
+          </button>
         </div>
       </div>
 
