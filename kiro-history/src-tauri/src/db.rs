@@ -350,10 +350,20 @@ pub fn rename_session(conn: &Connection, session_id: &str, new_title: &str) -> R
         return Err(anyhow::anyhow!("タイトルを入力してください"));
     }
     // Update sessions_meta: title と custom_title の両方を更新
-    conn.execute(
-        "UPDATE sessions_meta SET title = ?1, custom_title = ?1 WHERE session_id = ?2",
-        params![new_title, session_id],
-    )?;
+    // custom_title カラムが無い古い DB でも動作するよう fallback
+    if conn
+        .execute(
+            "UPDATE sessions_meta SET title = ?1, custom_title = ?1 WHERE session_id = ?2",
+            params![new_title, session_id],
+        )
+        .is_err()
+    {
+        // custom_title カラムが無い場合は title だけ更新
+        conn.execute(
+            "UPDATE sessions_meta SET title = ?1 WHERE session_id = ?2",
+            params![new_title, session_id],
+        )?;
+    }
     // Update FTS index: delete old entry and re-insert with new title
     // (FTS5 doesn't support UPDATE on content, so delete + insert)
     let (cwd, _full_text): (String, String) = conn.query_row(
