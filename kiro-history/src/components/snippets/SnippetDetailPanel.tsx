@@ -6,6 +6,7 @@ import { python } from "@codemirror/lang-python";
 import { rust } from "@codemirror/lang-rust";
 import { sql } from "@codemirror/lang-sql";
 import { json } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
 import { X, Copy, Check, Save, Edit, History, ExternalLink, Star, RotateCcw, Folder } from "lucide-react";
 import { api } from "../../api";
 import type { SnippetVersion, SnippetCollection } from "../../api";
@@ -35,7 +36,9 @@ function getLang(language: string) {
     case "rust": return rust();
     case "sql": return sql();
     case "json": return json();
-    default: return javascript();
+    case "markdown": case "md": return markdown();
+    // "text" / 不明な言語はハイライトなし（大きなファイルでも安全）
+    default: return [];
   }
 }
 
@@ -196,7 +199,7 @@ export function SnippetDetailPanel({ snippet, onClose, onSave, onSaveNew, onOpen
             value={editCode}
             height="100%"
             theme={oneDark}
-            extensions={[getLang(snippet.language)]}
+            extensions={(() => { const l = getLang(snippet.language); return Array.isArray(l) ? l : [l]; })()}
             onChange={setEditCode}
             style={{ height: "100%", fontSize: "12px", fontFamily: "'JetBrains Mono', monospace" }}
           />
@@ -205,7 +208,7 @@ export function SnippetDetailPanel({ snippet, onClose, onSave, onSaveNew, onOpen
             value={editCode}
             height="100%"
             theme={oneDark}
-            extensions={[getLang(snippet.language)]}
+            extensions={(() => { const l = getLang(snippet.language); return Array.isArray(l) ? l : [l]; })()}
             editable={false}
             style={{ height: "100%", fontSize: "12px", fontFamily: "'JetBrains Mono', monospace" }}
           />
