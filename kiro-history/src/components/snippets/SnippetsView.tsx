@@ -507,22 +507,6 @@ export function SnippetsView() {
 }
 
 // コードから意味あるタイトルを生成（指示文を除外してコードの特徴行を使う）
-function inferSnippetTitle(language: string, code: string): string {
-  const lines = code.split("\n").map((l) => l.trim()).filter(Boolean);
-  if (!lines.length) return `${language} snippet`;
-
-  // 指示文パターン（自然言語）を検出
-  const isInstruction = (line: string) =>
-    /[：:。]$/.test(line) ||
-    /(して|する|せよ|ください|通訳|翻訳|変換|説明|教えて|とは)/.test(line) ||
-    (!/[({=;]/.test(line) && line.length < 60);
-
-  // コードらしい行を優先
-  const codeLine = lines.find((l) => !isInstruction(l) && /[({=;#]|^(def |fn |function |class |import |from |use |const |let |var )/.test(l));
-  const best = codeLine ?? lines[0];
-  return best.length > 50 ? best.slice(0, 50) + "…" : best;
-}
-
 // ── Session snippet card (read-only, with Save button) ────────────────────────
 interface SessionSnippetCardProps {
   snippet: CodeSnippetWithSession;
@@ -535,7 +519,17 @@ interface SessionSnippetCardProps {
 function SessionSnippetCard({ snippet: s, view, isSelected, onSelect, onSave, onPreview }: SessionSnippetCardProps) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
+  const [title, setTitle] = useState<string>("");
   const color = langColor(s.language);
+
+  // Rust の suggest_snippet_title で人間向けタイトルを非同期生成
+  useEffect(() => {
+    api.suggestSnippetTitle(s.language, s.code)
+      .then(setTitle)
+      .catch(() => setTitle(s.code.split("\n")[0].slice(0, 50) || `${s.language} snippet`));
+  }, [s.language, s.code]);
+
+  const displayTitle = title || s.code.split("\n")[0].slice(0, 50) || `${s.language} snippet`;
 
   const copy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -552,10 +546,8 @@ function SessionSnippetCard({ snippet: s, view, isSelected, onSelect, onSave, on
         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
         <span className="text-xs font-mono px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: `${color}15`, color }}>{s.language}</span>
         <div className="flex flex-col min-w-0 flex-1">
-          <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>{inferSnippetTitle(s.language, s.code)}</span>
-          <span className="text-xs truncate font-medium" style={{ color: "var(--text-secondary)" }} title={s.session_title}>
-            {inferSnippetTitle(s.language, s.code)}
-          </span>
+          <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>{displayTitle}</span>
+          <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.session_title}</span>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
           <button onClick={(e) => { e.stopPropagation(); onSave(); }}
@@ -575,9 +567,10 @@ function SessionSnippetCard({ snippet: s, view, isSelected, onSelect, onSave, on
       <div className="flex items-center justify-between px-3 py-2.5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs px-2 py-0.5 rounded font-mono font-semibold flex-shrink-0" style={{ background: `${color}18`, color }}>{s.language}</span>
-          <span className="text-xs truncate font-medium" style={{ color: "var(--text-secondary)" }} title={s.session_title}>
-            {inferSnippetTitle(s.language, s.code)}
-          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs truncate font-medium" style={{ color: "var(--text-secondary)" }}>{displayTitle}</span>
+            <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.session_title}</span>
+          </div>
         </div>
       </div>
       <pre className="px-3 py-2.5 text-xs overflow-hidden flex-1"
