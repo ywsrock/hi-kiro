@@ -271,16 +271,101 @@ pub fn parse_jsonl_messages(jsonl_path: &Path) -> Result<Vec<Message>> {
 }
 
 /// Extract text from content array: [{kind: "text", data: "..."}]
+/// Also extracts code from toolUse items (file write tools: write/str_replace/fs_write/create)
 fn extract_text_content(content: &Value) -> String {
     let arr = match content.as_array() {
         Some(a) => a,
         None => return String::new(),
     };
-    arr.iter()
-        .filter(|item| item["kind"].as_str() == Some("text"))
-        .filter_map(|item| item["data"].as_str())
-        .collect::<Vec<_>>()
-        .join("\n")
+
+    let mut parts: Vec<&str> = Vec::new();
+    let mut wrapped: Vec<String> = Vec::new(); // ToolUse から包んだコードブロック
+
+    for item in arr {
+        match item["kind"].as_str() {
+            Some("text") => {
+                if let Some(t) = item["data"].as_str() {
+                    parts.push(t);
+                }
+            }
+            Some("toolUse") => {
+                // ファイル書き込み・編集系ツールのコードを抽出
+                let name = item["data"]["name"].as_str().unwrap_or("");
+                let is_write_tool = matches!(
+                    name,
+                    "write"
+                        | "create"
+                        | "str_replace"
+                        | "fs_write"
+                        | "insert"
+                        | "edit_file"
+                        | "write_file"
+                );
+                if is_write_tool {
+                    let input = &item["data"]["input"];
+                    // ファイルパスから言語を推定
+                    let lang = input["path"]
+                        .as_str()
+                        .and_then(|p| p.rsplit('.').next())
+                        .map(guess_lang_from_ext)
+                        .unwrap_or("");
+                    // content（新規ファイル書き込み）
+                    if let Some(c) = input["content"].as_str() {
+                        if c.len() > 10 {
+                            // コードブロック形式で包んで extract_snippets_from_text が拾えるようにする
+                            wrapped.push(format!("```{}\n{}\n```", lang, c));
+                        }
+                    }
+                    // newStr（str_replace の新しい内容）
+                    if let Some(s) = input["newStr"]
+                        .as_str()
+                        .or_else(|| input["new_str"].as_str())
+                    {
+                        if s.len() > 10 {
+                            wrapped.push(format!("```{}\n{}\n```", lang, s));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut result = parts.join("\n");
+    if !wrapped.is_empty() {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str(&wrapped.join("\n"));
+    }
+    result
+}
+
+/// ファイル拡張子から言語名を推定
+fn guess_lang_from_ext(ext: &str) -> &'static str {
+    match ext.to_lowercase().as_str() {
+        "ts" | "tsx" => "typescript",
+        "js" | "jsx" => "javascript",
+        "py" => "python",
+        "rs" => "rust",
+        "go" => "go",
+        "sql" => "sql",
+        "sh" | "bash" => "bash",
+        "json" => "json",
+        "yaml" | "yml" => "yaml",
+        "md" => "markdown",
+        "css" => "css",
+        "html" | "htm" => "html",
+        "java" => "java",
+        "kt" => "kotlin",
+        "rb" => "ruby",
+        "php" => "php",
+        "cs" => "csharp",
+        "cpp" | "cc" | "cxx" => "cpp",
+        "c" => "c",
+        "toml" => "toml",
+        _ => "",
+    }
 }
 
 /// Parse <uuid>/tasks/ directory (task session format).
