@@ -82,12 +82,12 @@ function CompactViewTabs({
   value,
   onChange,
 }: {
-  value: "day" | "week" | "month" | "all";
-  onChange: (v: "day" | "week" | "month" | "all") => void;
+  value: "month" | "all";
+  onChange: (v: "month" | "all") => void;
 }) {
   return (
     <div className="flex gap-0.5 flex-shrink-0">
-      {(["day", "week", "month", "all"] as const).map((v) => (
+      {(["month", "all"] as const).map((v) => (
         <button
           key={v}
           onClick={(e) => { e.stopPropagation(); onChange(v); }}
@@ -99,7 +99,7 @@ function CompactViewTabs({
             transition: "background 0.15s",
           }}
         >
-          {v === "day" ? "日" : v === "week" ? "週" : v === "month" ? "月" : "全期間"}
+          {v === "month" ? "月" : "全期間"}
         </button>
       ))}
     </div>
@@ -148,7 +148,7 @@ export function DashboardView() {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
   const [calendarView, setCalendarView] = useState<CalendarView>("day");
-  const [durationView, setDurationView] = useState<"day" | "week" | "month" | "all">("all");
+  const [durationView, setDurationView] = useState<"month" | "all">("all");
 
   useEffect(() => {
     // 初回: stats がまだない場合は先に古い stats を取得して画面を表示し、その後 rebuild
@@ -228,21 +228,13 @@ export function DashboardView() {
       };
     }
 
-    const today = toLocalDateStr(new Date());
-    const monday = new Date();
-    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-    const mondayStr = toLocalDateStr(monday);
-    const monthPrefix = today.slice(0, 7);
+    const monthPrefix = toLocalDateStr(new Date()).slice(0, 7);
 
     let totalSecs = 0;
     let totalCount = 0;
 
     dailyStatsMap.forEach((v, date) => {
-      const inRange =
-        durationView === "day" ? date === today
-        : durationView === "week" ? date >= mondayStr
-        : date.startsWith(monthPrefix);
-      if (inRange) {
+      if (date.startsWith(monthPrefix)) {
         totalSecs += v.duration_secs;
         totalCount += v.count;
       }
@@ -315,12 +307,7 @@ export function DashboardView() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard label="総セッション数" value={String(stats.total_sessions)} sub={`総${stats.total_messages}メッセージ`} />
           <SummaryCard
-              label={
-                durationView === "day" ? "本日の作業時間"
-                : durationView === "week" ? "今週の作業時間"
-                : durationView === "month" ? "今月の作業時間"
-                : "総作業時間"
-              }
+              label={durationView === "month" ? "今月の作業時間" : "総作業時間"}
               value={rebuilding ? "計算中..." : durationPeriod.hasData ? fmtDuration(durationPeriod.totalSecs) : "データなし"}
               sub={
                 rebuilding
