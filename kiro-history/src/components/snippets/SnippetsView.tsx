@@ -5,6 +5,7 @@ import { api } from "../../api";
 import type { ExportItem, SnippetCollection } from "../../api";
 import { useToast } from "../ui/Toast";
 import { useApp } from "../../context/AppContext";
+import { ConfirmDialog } from "../ui/ModalShell";
 import { SnippetCard, SaveSnippetModal, langColor, LANG_COLORS } from "./SnippetCard";
 import { SnippetDetailPanel } from "./SnippetDetailPanel";
 import type { SavedSnippet, CodeSnippetWithSession, SnippetStats } from "../../types";
@@ -49,6 +50,7 @@ export function SnippetsView() {
   const [selectedCollection, setSelectedCollection] = useState<string>("");  // "" = 全件
   const [newCollectionName, setNewCollectionName] = useState("");
   const [showCollectionCreate, setShowCollectionCreate] = useState(false);
+  const [confirmDeleteCollection, setConfirmDeleteCollection] = useState<import("../../api").SnippetCollection | null>(null);
 
   // ── エクスポート ──
   const handleExport = async () => {
@@ -295,16 +297,7 @@ export function SnippetsView() {
                 {collections.map((c) => (
                   <button
                     key={c.id}
-                    onClick={() => {
-                      if (window.confirm(`コレクション "${c.name}" を削除しますか？
-スニペットは削除されません。`)) {
-                        api.deleteSnippetCollection(c.id).then(() => {
-                          api.listSnippetCollections().then(setCollections);
-                          if (selectedCollection === c.name) setSelectedCollection("");
-                          toast.success("削除しました");
-                        }).catch((e: unknown) => toast.error(String(e)));
-                      }
-                    }}
+                    onClick={() => setConfirmDeleteCollection(c)}
                     className="text-xs px-2 py-0.5 rounded cursor-pointer"
                     style={{ background: "var(--border)", color: "var(--text-muted)" }}
                     title={`削除: ${c.name}`}
@@ -501,6 +494,27 @@ export function SnippetsView() {
             />
           </div>
         </div>
+      )}
+
+      {/* Collection delete confirm */}
+      {confirmDeleteCollection && (
+        <ConfirmDialog
+          title="コレクションを削除"
+          message={<>「<strong>{confirmDeleteCollection.name}</strong>」を削除します。スニペット自体は削除されません。</>}
+          confirmLabel="削除する"
+          danger
+          onConfirm={() => {
+            api.deleteSnippetCollection(confirmDeleteCollection.id)
+              .then(() => {
+                api.listSnippetCollections().then(setCollections);
+                if (selectedCollection === confirmDeleteCollection.name) setSelectedCollection("");
+                toast.success("削除しました");
+              })
+              .catch((e: unknown) => toast.error(String(e)))
+              .finally(() => setConfirmDeleteCollection(null));
+          }}
+          onCancel={() => setConfirmDeleteCollection(null)}
+        />
       )}
 
       {/* Save Modal */}

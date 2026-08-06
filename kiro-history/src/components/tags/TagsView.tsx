@@ -3,6 +3,7 @@ import { Plus, Zap, Tag, Trash2, Edit2, GitMerge, MoreHorizontal, ChevronRight, 
 import { api } from "../../api";
 import { useApp } from "../../context/AppContext";
 import { useToast } from "../ui/Toast";
+import { ConfirmDialog } from "../ui/ModalShell";
 import { TagEditorModal } from "./TagEditorModal";
 import { SessionList } from "../session/SessionList";
 import { PreviewPane } from "../preview/PreviewPane";
@@ -118,6 +119,8 @@ export function TagsView() {
   const [contextMenu, setContextMenu] = useState<{ tag: TagMeta } | null>(null);
   const [mergeTarget, setMergeTarget] = useState<TagMeta | null>(null);
   const [mergeFrom, setMergeFrom] = useState<TagMeta | null>(null);
+  const [confirmDeleteTag, setConfirmDeleteTag] = useState<TagMeta | null>(null);
+  const [confirmMerge, setConfirmMerge] = useState<{ from: TagMeta; to: TagMeta } | null>(null);
 
   const loadTags = useCallback(async () => {
     try {
@@ -169,9 +172,11 @@ export function TagsView() {
     });
   };
 
-  const handleDeleteTag = async (tag: TagMeta) => {
-    const confirmed = window.confirm(`タグ「${tag.tag}」を削除しますか？\n全セッションから除去されます。`);
-    if (!confirmed) return;
+  const handleDeleteTag = (tag: TagMeta) => {
+    setConfirmDeleteTag(tag);
+  };
+
+  const executeDeleteTag = async (tag: TagMeta) => {
     try {
       const affected = await api.deleteTagFull(tag.tag);
       toast.success(`${tag.tag} を削除しました（${affected}件のセッションから除去）`);
@@ -179,21 +184,27 @@ export function TagsView() {
       await loadTags();
     } catch (e) {
       toast.error(`削除エラー: ${e}`);
+    } finally {
+      setConfirmDeleteTag(null);
     }
   };
 
-  const handleMerge = async (from: TagMeta, to: TagMeta) => {
-    const confirmed = window.confirm(`「${from.tag}」を「${to.tag}」に統合しますか？\n${from.tag} は削除されます。`);
-    if (!confirmed) return;
+  const handleMerge = (from: TagMeta, to: TagMeta) => {
+    setConfirmMerge({ from, to });
+  };
+
+  const executeMerge = async (from: TagMeta, to: TagMeta) => {
     try {
       const affected = await api.mergeTags(from.tag, to.tag);
       toast.success(`統合完了（${affected}件のセッションを更新）`);
       await loadTags();
     } catch (e) {
       toast.error(`統合エラー: ${e}`);
+    } finally {
+      setMergeFrom(null);
+      setMergeTarget(null);
+      setConfirmMerge(null);
     }
-    setMergeFrom(null);
-    setMergeTarget(null);
   };
 
   const handleDeleteMultiple = (ids: string[]) => {
@@ -206,6 +217,7 @@ export function TagsView() {
   const treeNodes = buildTree(manualTags);
 
   return (
+    <>
     <div className="flex flex-1 overflow-hidden">
       {/* ── Left Nav Panel ──────────────────────────────────────────────── */}
       <div className="flex flex-col flex-shrink-0 overflow-hidden"
@@ -460,5 +472,30 @@ export function TagsView() {
         </div>
       )}
     </div>
+
+      {/* タグ削除確認 */}
+      {confirmDeleteTag && (
+        <ConfirmDialog
+          title="タグを削除"
+          message={<>「<strong>{confirmDeleteTag.tag}</strong>」を削除します。全セッションからこのタグが除去されます。</>}
+          confirmLabel="削除する"
+          danger
+          onConfirm={() => executeDeleteTag(confirmDeleteTag)}
+          onCancel={() => setConfirmDeleteTag(null)}
+        />
+      )}
+
+      {/* タグ統合確認 */}
+      {confirmMerge && (
+        <ConfirmDialog
+          title="タグを統合"
+          message={<>「<strong>{confirmMerge.from.tag}</strong>」を「<strong>{confirmMerge.to.tag}</strong>」に統合します。{confirmMerge.from.tag} は削除されます。</>}
+          confirmLabel="統合する"
+          danger={false}
+          onConfirm={() => executeMerge(confirmMerge.from, confirmMerge.to)}
+          onCancel={() => setConfirmMerge(null)}
+        />
+      )}
+    </>
   );
 }

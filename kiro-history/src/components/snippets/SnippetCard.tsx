@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import { Star, Copy, Check, Trash2, Edit2, ExternalLink, Save, X, Zap, GitBranch } from "lucide-react";
 import { api } from "../../api";
 import { useToast } from "../ui/Toast";
+import { ConfirmDialog } from "../ui/ModalShell";
 import { useApp } from "../../context/AppContext";
 import type { SavedSnippet, SimilarSnippet } from "../../types";
 
@@ -184,6 +185,7 @@ export function SnippetCard({ snippet: s, view, isSelected, onSelect, onChange }
   const { navigateToSession } = useApp();
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editTitle, setEditTitle] = useState(s.title);
   const [editDesc, setEditDesc] = useState(s.description);
   const [similar, setSimilar] = useState<SimilarSnippet[]>([]);
@@ -204,11 +206,10 @@ export function SnippetCard({ snippet: s, view, isSelected, onSelect, onChange }
     await api.toggleSnippetStar(s.id);
     onChange();
   };
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm(`「${s.title}」を削除しますか？`)) return;
+  const handleDelete = async () => {
     await api.deleteSnippet(s.id);
     toast.success("削除しました");
+    setConfirmDelete(false);
     onChange();
   };
   const saveEdit = async () => {
@@ -248,7 +249,7 @@ export function SnippetCard({ snippet: s, view, isSelected, onSelect, onChange }
           <button onClick={toggleStar} className="p-1 rounded cursor-pointer" style={{ color: s.starred ? "#F59E0B" : "var(--text-muted)" }}>
             <Star size={13} fill={s.starred ? "currentColor" : "none"} />
           </button>
-          <button onClick={handleDelete} className="p-1 rounded cursor-pointer"
+          <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }} className="p-1 rounded cursor-pointer"
             onMouseEnter={(e) => (e.currentTarget.style.color = "#EF4444")}
             onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
             style={{ color: "var(--text-muted)" }}><Trash2 size={13} /></button>
@@ -319,7 +320,7 @@ export function SnippetCard({ snippet: s, view, isSelected, onSelect, onChange }
           <div className="flex items-center gap-1">
             <button onClick={loadSimilar} className="p-1 rounded cursor-pointer opacity-0 group-hover:opacity-100" style={{ color: "var(--text-muted)" }} title="類似"><GitBranch size={12} /></button>
             <button onClick={(e) => { e.stopPropagation(); setEditing(true); }} className="p-1 rounded cursor-pointer opacity-0 group-hover:opacity-100" style={{ color: "var(--text-muted)" }} title="編集"><Edit2 size={12} /></button>
-            <button onClick={handleDelete} className="p-1 rounded cursor-pointer opacity-0 group-hover:opacity-100"
+            <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }} className="p-1 rounded cursor-pointer opacity-0 group-hover:opacity-100"
               onMouseEnter={(e) => (e.currentTarget.style.color = "#EF4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
               style={{ color: "var(--text-muted)" }} title="削除"><Trash2 size={12} /></button>
             <button onClick={(e) => { e.stopPropagation(); copy(e); }}
@@ -343,6 +344,16 @@ export function SnippetCard({ snippet: s, view, isSelected, onSelect, onChange }
             </div>
           ))}
         </div>
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="スニペットを削除"
+          message={<>「<strong>{s.title}</strong>」を削除します。この操作は取り消せません。</>}
+          confirmLabel="削除する"
+          danger
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(false)}
+        />
       )}
     </div>
   );
