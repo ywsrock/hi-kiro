@@ -408,7 +408,7 @@ export function SnippetsView() {
                 {savedSnippets.map((s) => (
                   <SnippetCard key={s.id} snippet={s} view="grid"
                     isSelected={selectedId === s.id}
-                    onSelect={() => setSelectedId(selectedId === s.id ? null : s.id)}
+                    onSelect={() => { setSelectedId(s.id); setDetailSnippet(s); }}
                     onChange={loadSaved} />
                 ))}
               </div>
@@ -417,7 +417,7 @@ export function SnippetsView() {
                 {savedSnippets.map((s) => (
                   <SnippetCard key={s.id} snippet={s} view="list"
                     isSelected={selectedId === s.id}
-                    onSelect={() => setSelectedId(selectedId === s.id ? null : s.id)}
+                    onSelect={() => { setSelectedId(s.id); setDetailSnippet(s); }}
                     onChange={loadSaved} />
                 ))}
               </div>
@@ -446,6 +446,49 @@ export function SnippetsView() {
           </>
         )}
       </div>
+
+      {/* Snippet Detail Modal */}
+      {detailSnippet && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setDetailSnippet(null)}
+        >
+          <div
+            className="rounded-xl shadow-2xl overflow-hidden"
+            style={{
+              width: "min(820px, 94vw)",
+              height: "min(640px, 88vh)",
+              display: "flex",
+              flexDirection: "column",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <SnippetDetailPanel
+              snippet={detailSnippet}
+              onClose={() => setDetailSnippet(null)}
+              onSave={() => {
+                loadSaved();
+                // 保存済みスニペットなら最新データで再描画
+                if ("id" in detailSnippet) {
+                  api.searchSavedSnippets({ query: "" }).then((list) => {
+                    const updated = list.find((x) => x.id === (detailSnippet as import("../../types").SavedSnippet).id);
+                    if (updated) setDetailSnippet(updated);
+                  }).catch(() => {});
+                }
+              }}
+              onSaveNew={() => {
+                if ("session_id" in detailSnippet) {
+                  setSaveModal(detailSnippet as CodeSnippetWithSession);
+                  setDetailSnippet(null);
+                }
+              }}
+              collections={collections}
+              onOpenSession={(id) => { navigateToSession(id); setDetailSnippet(null); }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Save Modal */}
       {saveModal && (
