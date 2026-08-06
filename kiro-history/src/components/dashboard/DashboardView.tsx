@@ -82,12 +82,12 @@ function CompactViewTabs({
   value,
   onChange,
 }: {
-  value: CalendarView;
-  onChange: (v: CalendarView) => void;
+  value: "day" | "week" | "month" | "all";
+  onChange: (v: "day" | "week" | "month" | "all") => void;
 }) {
   return (
     <div className="flex gap-0.5 flex-shrink-0">
-      {(["day", "week", "month"] as const).map((v) => (
+      {(["day", "week", "month", "all"] as const).map((v) => (
         <button
           key={v}
           onClick={(e) => { e.stopPropagation(); onChange(v); }}
@@ -99,7 +99,7 @@ function CompactViewTabs({
             transition: "background 0.15s",
           }}
         >
-          {v === "day" ? "日" : v === "week" ? "週" : "月"}
+          {v === "day" ? "日" : v === "week" ? "週" : v === "month" ? "月" : "全期間"}
         </button>
       ))}
     </div>
@@ -147,7 +147,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export function DashboardView() {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [calendarView, setCalendarView] = useState<CalendarView>("day");
-  const [durationView, setDurationView] = useState<CalendarView>("day");
+  const [durationView, setDurationView] = useState<"day" | "week" | "month" | "all">("all");
 
   useEffect(() => {
     api.getStats().then(setStats).catch(console.error);
@@ -204,8 +204,17 @@ export function DashboardView() {
     return map;
   }, [stats]);
 
-  // 選択期間（今日/今週/今月）の作業時間サマリー
+  // 選択期間（今日/今週/今月/全期間）の作業時間サマリー
   const durationPeriod = useMemo(() => {
+    // 全期間は stats の集計値をそのまま使う
+    if (durationView === "all") {
+      return {
+        totalSecs: stats?.total_duration_secs ?? 0,
+        avgSecs: stats?.avg_duration_secs ?? 0,
+        hasData: (stats?.total_duration_secs ?? 0) > 0,
+      };
+    }
+
     const today = toLocalDateStr(new Date());
     const monday = new Date();
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
@@ -225,8 +234,12 @@ export function DashboardView() {
         totalCount += v.count;
       }
     });
-    return { totalSecs, avgSecs: totalCount > 0 ? totalSecs / totalCount : 0 };
-  }, [dailyStatsMap, durationView]);
+    return {
+      totalSecs,
+      avgSecs: totalCount > 0 ? totalSecs / totalCount : 0,
+      hasData: totalCount > 0,
+    };
+  }, [dailyStatsMap, durationView, stats]);
 
   if (!stats) {
     return (
@@ -286,9 +299,18 @@ export function DashboardView() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard label="総セッション数" value={String(stats.total_sessions)} sub={`総${stats.total_messages}メッセージ`} />
           <SummaryCard
-              label={durationView === "day" ? "本日の作業時間" : durationView === "week" ? "今週の作業時間" : "今月の作業時間"}
-              value={fmtDuration(durationPeriod.totalSecs)}
-              sub={`平均 ${fmtDuration(Math.round(durationPeriod.avgSecs))}/session`}
+              label={
+                durationView === "day" ? "本日の作業時間"
+                : durationView === "week" ? "今週の作業時間"
+                : durationView === "month" ? "今月の作業時間"
+                : "総作業時間"
+              }
+              value={durationPeriod.hasData ? fmtDuration(durationPeriod.totalSecs) : "データなし"}
+              sub={
+                durationPeriod.hasData
+                  ? `平均 ${fmtDuration(Math.round(durationPeriod.avgSecs))}/session`
+                  : "この期間の記録がありません"
+              }
               headerExtra={<CompactViewTabs value={durationView} onChange={setDurationView} />}
             />
           <SummaryCard label="推定コスト" value={fmtCost(stats.total_est_cost_usd)} sub={`推定 ${fmtTokens(stats.est_tokens_total)} tokens`} accent />
