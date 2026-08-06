@@ -20,6 +20,13 @@ pub fn run() {
     // GDK_BACKEND / WEBKIT env vars must be set before process start.
     // Use ~/kiro-history/dev.sh to launch with proper WSLg/IME settings.
     tauri::Builder::default()
+        // 二重起動禁止: 2回目の起動時は既存ウィンドウにフォーカスを移す
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(
             tauri_plugin_log::Builder::new()
                 .target(tauri_plugin_log::Target::new(
