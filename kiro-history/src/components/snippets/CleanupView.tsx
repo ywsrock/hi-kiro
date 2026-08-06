@@ -248,7 +248,7 @@ export function CleanupView() {
         {/* 重複候補 */}
         <section>
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>🔁 重複候補</span>
+            <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>重複候補</span>
             <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
               {duplicates.length}組
             </span>
@@ -274,7 +274,7 @@ export function CleanupView() {
         {/* 未使用スニペット */}
         <section>
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>💤 90日以上未使用</span>
+            <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>90日以上未使用</span>
             <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
               {unused.length}件
             </span>

@@ -203,7 +203,7 @@ export function SnippetsView() {
                 color: tab === t ? "var(--accent)" : "var(--text-muted)",
                 borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
               }}>
-              {t === "saved" ? `保存済み${stats ? ` (${stats.total_saved})` : ""}` : "🔧 整理"}
+              {t === "saved" ? `保存済み${stats ? ` (${stats.total_saved})` : ""}` : "整理"}
             </button>
           ))}
           <div className="flex-1" />
