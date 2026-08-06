@@ -151,15 +151,20 @@ export function DashboardView() {
   const [durationView, setDurationView] = useState<"day" | "week" | "month" | "all">("all");
 
   useEffect(() => {
-    // Dashboard を開くたびにインデックスを再構築してから統計を取得
-    setRebuilding(true);
-    api.rebuildIndex()
-      .catch(console.error)
-      .finally(() => {
-        setRebuilding(false);
-        api.getStats().then(setStats).catch(console.error);
-      });
-  }, []);
+    // 初回: stats がまだない場合は先に古い stats を取得して画面を表示し、その後 rebuild
+    const loadThenRebuild = async () => {
+      if (!stats) {
+        // 初回: キャッシュから即座に表示
+        try { const s = await api.getStats(); setStats(s); } catch { /* ignore */ }
+      }
+      // rebuild（総作業時間カードのみ「計算中」表示）
+      setRebuilding(true);
+      try { await api.rebuildIndex(); } catch { /* ignore */ }
+      setRebuilding(false);
+      try { const s = await api.getStats(); setStats(s); } catch { /* ignore */ }
+    };
+    loadThenRebuild();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 汎用週次集計（月曜始まり）
   function aggregateByWeek(daily: { date: string; value: number }[]) {
@@ -249,7 +254,8 @@ export function DashboardView() {
     };
   }, [dailyStatsMap, durationView, stats]);
 
-  if (!stats) {
+  // 初回ロード中（stats がまだ null かつ rebuilding）だけ全画面スピナー
+  if (!stats && rebuilding) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="flex items-center gap-3" style={{ color: "var(--text-muted)" }}>
@@ -259,6 +265,8 @@ export function DashboardView() {
       </div>
     );
   }
+  // stats が null かつ rebuilding も終わっていない（初期状態）もガード
+  if (!stats) return null;
 
   const endDate = new Date();
   const startDate = new Date(endDate);
