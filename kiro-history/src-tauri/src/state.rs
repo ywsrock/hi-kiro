@@ -42,8 +42,26 @@ pub struct AppState {
     pub sqlite_tmp_cache: Option<(PathBuf, std::time::SystemTime)>,
     /// モデル価格設定キャッシュ（再読み込みで更新可能）
     pub model_prices: RwLock<crate::model_prices::ModelPricesConfig>,
+    /// 統計キャッシュ（インデックス更新時のみ再計算）
+    pub stats_cache: std::sync::RwLock<StatsCache>,
     /// 全セッションスニペットキャッシュ（mtimeベース、タブ切り替え高速化）
     pub snippets_cache: std::sync::RwLock<SnippetsScanCache>,
+}
+
+/// `get_stats` のキャッシュ（インデックス更新が無ければ再計算しない）
+pub struct StatsCache {
+    /// index_meta.last_indexed_at（変化したら再計算）
+    pub last_indexed_at: Option<String>,
+    pub data: Option<crate::types::StatsData>,
+}
+
+impl StatsCache {
+    pub fn new() -> Self {
+        StatsCache {
+            last_indexed_at: None,
+            data: None,
+        }
+    }
 }
 
 /// `get_all_snippets` 用の JSONL 全件スキャン結果キャッシュ
@@ -80,6 +98,7 @@ impl AppState {
             session_cache: LruCache::new(NonZeroUsize::new(SESSION_CACHE_CAPACITY).unwrap()),
             sqlite_tmp_cache: None,
             model_prices: RwLock::new(crate::model_prices::load()),
+            stats_cache: std::sync::RwLock::new(StatsCache::new()),
             snippets_cache: std::sync::RwLock::new(SnippetsScanCache::new()),
         }
     }

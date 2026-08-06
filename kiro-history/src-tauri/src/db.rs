@@ -500,38 +500,31 @@ pub fn get_stats(
         .flatten()
         .collect();
 
-    // Sessions by date (daily, last 365 days)
+    // Daily stats: sessions count + duration — 1 scan for both
     let mut stmt = conn.prepare(
         "SELECT strftime('%Y-%m-%d', datetime(updated_at/1000, 'unixepoch', 'localtime')) as d,
-                COUNT(*) as cnt
-         FROM sessions_meta WHERE updated_at > (strftime('%s','now') - 365*86400) * 1000
-         GROUP BY d ORDER BY d",
-    )?;
-    let sessions_by_date: Vec<crate::types::DateCount> = stmt
-        .query_map([], |r| {
-            Ok(crate::types::DateCount {
-                date: r.get(0)?,
-                count: r.get(1)?,
-            })
-        })?
-        .flatten()
-        .collect();
-
-    // Duration by date (daily, last 365 days)
-    let mut stmt = conn.prepare(
-        "SELECT strftime('%Y-%m-%d', datetime(updated_at/1000, 'unixepoch', 'localtime')) as d,
+                COUNT(*) as cnt,
                 COALESCE(SUM(total_duration_secs), 0) as secs
          FROM sessions_meta WHERE updated_at > (strftime('%s','now') - 365*86400) * 1000
          GROUP BY d ORDER BY d",
     )?;
-    let duration_by_date: Vec<crate::types::DateDuration> = stmt
-        .query_map([], |r| {
-            Ok(crate::types::DateDuration {
-                date: r.get(0)?,
-                duration_secs: r.get(1)?,
-            })
-        })?
+    let daily_stats: Vec<(String, i64, i64)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .flatten()
+        .collect();
+    let sessions_by_date: Vec<crate::types::DateCount> = daily_stats
+        .iter()
+        .map(|(d, cnt, _)| crate::types::DateCount {
+            date: d.clone(),
+            count: *cnt,
+        })
+        .collect();
+    let duration_by_date: Vec<crate::types::DateDuration> = daily_stats
+        .into_iter()
+        .map(|(d, _, secs)| crate::types::DateDuration {
+            date: d,
+            duration_secs: secs,
+        })
         .collect();
 
     // By hour (local time via 'localtime' modifier)

@@ -95,7 +95,7 @@ pub struct SmartTagRule {
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelCount {
     pub model_name: String,
     pub count: i64,
@@ -103,7 +103,7 @@ pub struct ModelCount {
     pub total_duration_secs: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CwdCount {
     pub cwd: String,
     pub count: i64,
@@ -118,25 +118,25 @@ pub struct DateDuration {
     pub duration_secs: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DateCount {
     pub date: String, // "YYYY-MM-DD"
     pub count: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HourCount {
     pub hour: u8,
     pub count: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WeekdayCount {
     pub weekday: u8, // 0=Sun ... 6=Sat
     pub count: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CostBreakdown {
     pub model_name: String,
     pub est_input_tokens: i64,
@@ -144,7 +144,7 @@ pub struct CostBreakdown {
     pub est_cost_usd: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatsData {
     // ── Core ──────────────────────────────────────
     pub total_sessions: i64,

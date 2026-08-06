@@ -188,11 +188,15 @@ pub async fn rebuild_index(
     index::rebuild_index(&conn, &sessions_dir, &sqlite_db_path, Some(&app))
         .map_err(|e| e.to_string())?;
 
-    // スニペットキャッシュを無効化（再構築後の全セッションタブ更新のため）
+    // スニペット・統計キャッシュを無効化（再構築後の再計算を保証）
     if let Ok(guard) = state.lock() {
         if let Ok(mut cache) = guard.snippets_cache.write() {
             cache.dir_mtime = None;
             cache.sessions.clear();
+        }
+        if let Ok(mut cache) = guard.stats_cache.write() {
+            cache.last_indexed_at = None;
+            cache.data = None;
         }
     }
 
@@ -570,9 +574,39 @@ pub fn rename_session(
 
 #[tauri::command]
 pub fn get_stats(state: State<'_, Mutex<AppState>>) -> Result<StatsData, String> {
-    let state = state.lock().map_err(|e| e.to_string())?;
-    let prices = state.model_prices.read().map_err(|e| e.to_string())?;
-    db::get_stats(&state.index_conn, &prices).map_err(|e| e.to_string())
+    let state_guard = state.lock().map_err(|e| e.to_string())?;
+
+    // インデックスの最終更新時刻を取得（変化がなければキャッシュを返す）
+    let current_indexed_at: Option<String> = state_guard
+        .index_conn
+        .query_row(
+            "SELECT value FROM index_meta WHERE key='last_indexed_at'",
+            [],
+            |r| r.get(0),
+        )
+        .ok();
+
+    // キャッシュヒット確認
+    {
+        let cache = state_guard.stats_cache.read().map_err(|e| e.to_string())?;
+        if cache.last_indexed_at.is_some() && cache.last_indexed_at == current_indexed_at {
+            if let Some(data) = &cache.data {
+                return Ok(data.clone());
+            }
+        }
+    }
+
+    // キャッシュミス：フル計算
+    let prices = state_guard.model_prices.read().map_err(|e| e.to_string())?;
+    let fresh = db::get_stats(&state_guard.index_conn, &prices).map_err(|e| e.to_string())?;
+
+    // キャッシュ更新
+    if let Ok(mut cache) = state_guard.stats_cache.write() {
+        cache.last_indexed_at = current_indexed_at;
+        cache.data = Some(fresh.clone());
+    }
+
+    Ok(fresh)
 }
 
 // ── Snippets ──────────────────────────────────────────────────────────────────
