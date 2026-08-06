@@ -54,9 +54,11 @@ export function SaveSnippetModal({ language, code, sessionId, sessionTitle, cwd,
     });
     // 類似スニペットを事前チェック
     api.findSimilarSnippets(code, language).then((sims) => {
+      console.log("[dup-check] sims:", sims.length, sims.map(s => s.similarity));
       const high = sims.filter((s) => s.similarity >= 0.8);
+      console.log("[dup-check] high:", high.length);
       setDuplicates(high);
-    }).catch(() => {});
+    }).catch((e) => { console.error("[dup-check] error:", e); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addTag = () => {
@@ -178,14 +180,21 @@ export function SaveSnippetModal({ language, code, sessionId, sessionTitle, cwd,
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-3 px-5 py-3" style={{ borderTop: "1px solid var(--border)" }}>
-          <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg cursor-pointer"
-            style={{ background: "var(--border)", color: "var(--text-secondary)" }}>キャンセル</button>
-          <button onClick={handleSave} disabled={loading}
-            className="text-sm px-4 py-2 rounded-lg cursor-pointer font-medium"
-            style={{ background: "var(--accent)", color: "#000", opacity: loading ? 0.6 : 1 }}>
-            {loading ? "保存中..." : "保存する"}
-          </button>
+        <div className="flex flex-col gap-2 px-5 py-3" style={{ borderTop: "1px solid var(--border)" }}>
+          {showDupWarn && duplicates.length > 0 && (
+            <div className="px-3 py-2 rounded text-xs" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.35)" }}>
+              ⚠️ 類似スニペットが {duplicates.length} 件あります（{(duplicates[0].similarity * 100).toFixed(0)}% 一致）。それでも保存しますか？
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-3">
+            <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg cursor-pointer"
+              style={{ background: "var(--border)", color: "var(--text-secondary)" }}>キャンセル</button>
+            <button onClick={handleSave} disabled={loading}
+              className="text-sm px-4 py-2 rounded-lg cursor-pointer font-medium"
+              style={{ background: showDupWarn ? "#ef4444" : "var(--accent)", color: showDupWarn ? "#fff" : "#000", opacity: loading ? 0.6 : 1 }}>
+              {loading ? "保存中..." : showDupWarn ? "重複を無視して保存" : "保存する"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
