@@ -483,13 +483,22 @@ pub fn suggest_snippet_title(language: &str, code: &str) -> String {
     }
 
     // Priority 4: fallback
-    let code_line = lines.iter().find(|&&line| {
-        let t = line.trim();
-        !is_instruction_text(t) && has_code_characteristics(t)
-    });
+    // コードらしい行を優先。なければ指示文でない行。それもなければ最初の行。
+    let code_line = lines
+        .iter()
+        .find(|&&line| {
+            let t = line.trim();
+            !is_instruction_text(t) && has_code_characteristics(t)
+        })
+        .or_else(|| {
+            // コード記号はなくても指示文でない行
+            lines
+                .iter()
+                .find(|&&line| !is_instruction_text(line.trim()))
+        })
+        .or(lines.first()); // 最終フォールバック（全行が指示文でも何か返す）
 
-    let best_line = code_line.unwrap_or(&lines[0]);
-    let raw = best_line.trim();
+    let raw = code_line.map(|l| l.trim()).unwrap_or("");
     let chars: Vec<char> = raw.chars().collect();
     if chars.is_empty() {
         format!("{} snippet", language)
@@ -559,17 +568,42 @@ fn fn_name_to_human(name: &str) -> String {
 
 /// Detect natural-language instruction text (not code)
 fn is_instruction_text(t: &str) -> bool {
-    t.ends_with(':')
-        || t.ends_with("して")
-        || t.ends_with("する")
-        || t.ends_with("せよ")
-        || t.ends_with("ください")
-        || (t
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == ' ' || c == '.' || c == ',' || c == '?')
-            && !t.contains('{')
-            && !t.contains('(')
-            && !t.contains('='))
+    // 日本語文字（ひらがな・カタカナ・漢字）が含まれるか判定
+    let has_japanese = t
+        .chars()
+        .any(|c| matches!(c, '\u{3040}'..='\u{30FF}' | '\u{4E00}'..='\u{9FFF}'));
+
+    if has_japanese {
+        // 日本語行: 全角コロン・句読点で終わるなら指示文
+        // (半角コロン ':' はPython/Rustの構文で正常使用されるため除外しない)
+        if t.ends_with('\u{FF1A}') || t.ends_with('\u{3002}') || t.ends_with('\u{3001}') {
+            return true;
+        }
+    }
+
+    // 日本語の指示語で終わる行
+    const INSTRUCTION_SUFFIXES: &[&str] = &[
+        "\u{3057}\u{3066}",                 // して
+        "\u{3059}\u{308B}",                 // する
+        "\u{305B}\u{3088}",                 // せよ
+        "\u{304F}\u{3060}\u{3055}\u{3044}", // ください
+        "\u{901A}\u{8A33}",                 // 通訳
+        "\u{7FFB}\u{8A33}",                 // 翻訳
+        "\u{5909}\u{63DB}",                 // 変換
+        "\u{8AAC}\u{660E}",                 // 説明
+        "\u{6559}\u{3048}\u{3066}",         // 教えて
+        "\u{3068}\u{306F}",                 // とは
+    ];
+    if INSTRUCTION_SUFFIXES.iter().any(|&s| t.ends_with(s)) {
+        return true;
+    }
+
+    // 記号・括弧・演算子を含まない英数字テキスト（コードらしくない）
+    t.chars()
+        .all(|c| c.is_alphanumeric() || c == ' ' || c == '.' || c == ',' || c == '?')
+        && !t.contains('{')
+        && !t.contains('(')
+        && !t.contains('=')
 }
 
 /// Has code-like characteristics
@@ -1049,7 +1083,22 @@ docker build -t myapp ."#;
 def hello():
     print("hello")"#;
         let t = suggest_snippet_title("python", code);
-        // 指示文ではなくコード行が選ばれるはず
         assert!(!t.contains("以下") && !t.contains("ください"), "got: {}", t);
+    }
+
+    #[test]
+    fn test_fullwidth_colon_skipped() {
+        // 全角コロン「：」で終わる指示文が除外され、コード行が選ばれること
+        let code = "下記の行を日本語に通訳：\ndef hello():\n    pass";
+        let t = suggest_snippet_title("python", code);
+        assert!(!t.contains("通訳") && !t.contains("下記"), "got: {}", t);
+    }
+
+    #[test]
+    fn test_halfwidth_colon_skipped() {
+        // 半角コロンで終わる指示文も除外されること
+        let code = "Translate this:\ndef greet(name: str):\n    pass";
+        let t = suggest_snippet_title("python", code);
+        assert!(!t.starts_with("Translate"), "got: {}", t);
     }
 }
