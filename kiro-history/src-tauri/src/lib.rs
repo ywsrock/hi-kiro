@@ -165,9 +165,8 @@ pub fn run() {
                 let _ = app_handle.emit("index:done", ());
             });
 
-            // ── グローバルショートカット (Ctrl+Shift+V) ──────────────────
+            // ── グローバルショートカット ──────────────────────────────────
             use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-            let shortcut: Shortcut = "Ctrl+Shift+V".parse().expect("invalid shortcut");
             let app_handle2 = app.handle().clone();
             app.handle()
                 .plugin(
@@ -188,7 +187,28 @@ pub fn run() {
                         .build(),
                 )
                 .ok();
-            app.global_shortcut().register(shortcut).ok();
+            // 設定に基づいてショートカットを登録
+            {
+                let cfg = state::load_config();
+                let enabled = cfg.palette_shortcut_enabled.unwrap_or(true);
+                let key = cfg
+                    .palette_shortcut_key
+                    .unwrap_or_else(|| "CommandOrControl+Shift+V".to_string());
+                if enabled {
+                    match key.parse::<Shortcut>() {
+                        Ok(sc) => {
+                            if let Err(e) = app.global_shortcut().register(sc) {
+                                eprintln!("[shortcut] register failed: {e}");
+                            } else {
+                                eprintln!("[shortcut] registered: {key}");
+                            }
+                        }
+                        Err(e) => eprintln!("[shortcut] parse failed '{key}': {e}"),
+                    }
+                } else {
+                    eprintln!("[shortcut] disabled by config");
+                }
+            }
 
             Ok(())
         })
