@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Search, Save, RotateCcw, FileJson } from "lucide-react";
+import { RefreshCw, Search, Save, RotateCcw, FileJson, Power } from "lucide-react";
+import { exit } from "@tauri-apps/plugin-process";
 import { api } from "../../api";
 import { useToast } from "../ui/Toast";
 
@@ -387,6 +388,40 @@ export function SettingsView() {
         >
           <RefreshCw size={14} className={rebuilding ? "animate-spin" : ""} />
           {rebuilding ? "Rebuilding..." : "Rebuild Index"}
+        </button>
+      </div>
+      {/* ── アプリケーション終了 ── */}
+      <div
+        className="rounded-lg p-4 mt-2"
+        style={{
+          background: "rgba(239,68,68,0.05)",
+          border: "1px solid rgba(239,68,68,0.2)",
+        }}
+      >
+        <h3 className="text-sm font-medium mb-2" style={{ color: "#EF4444" }}>
+          アプリケーション終了
+        </h3>
+        <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
+          アプリを完全に終了します。トレイにも残りません。
+        </p>
+        <button
+          onClick={async () => {
+            const ok = await api.confirmDelete(
+              "hi-kiro を終了しますか？\nトレイからも削除されます。"
+            );
+            if (ok) {
+              await exit(0);
+            }
+          }}
+          className="flex items-center gap-2 text-sm px-4 py-2 rounded cursor-pointer font-medium"
+          style={{
+            background: "rgba(239,68,68,0.15)",
+            color: "#EF4444",
+            border: "1px solid rgba(239,68,68,0.3)",
+          }}
+        >
+          <Power size={14} />
+          アプリケーションを終了
         </button>
       </div>
     </div>
