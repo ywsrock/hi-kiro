@@ -206,6 +206,10 @@ pub fn run() {
             commands::snapshot_snippet_version,
             commands::export_snippets,
             commands::import_snippets,
+            commands::list_snippet_collections,
+            commands::create_snippet_collection,
+            commands::delete_snippet_collection,
+            commands::set_snippet_collection,
             commands::search_sessions_cursor,
         ])
         .run(tauri::generate_context!())

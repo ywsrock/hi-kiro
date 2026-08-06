@@ -6,9 +6,9 @@ import { python } from "@codemirror/lang-python";
 import { rust } from "@codemirror/lang-rust";
 import { sql } from "@codemirror/lang-sql";
 import { json } from "@codemirror/lang-json";
-import { X, Copy, Check, Save, Edit, History, ExternalLink, Star, RotateCcw } from "lucide-react";
+import { X, Copy, Check, Save, Edit, History, ExternalLink, Star, RotateCcw, Folder } from "lucide-react";
 import { api } from "../../api";
-import type { SnippetVersion } from "../../api";
+import type { SnippetVersion, SnippetCollection } from "../../api";
 import type { SavedSnippet, CodeSnippetWithSession } from "../../types";
 import { useToast } from "../ui/Toast";
 import { langColor } from "./SnippetCard";
@@ -18,9 +18,10 @@ type PanelSnippet = SavedSnippet | CodeSnippetWithSession;
 interface Props {
   snippet: PanelSnippet;
   onClose: () => void;
-  onSave?: () => void;          // saved snippetの更新後
-  onSaveNew?: () => void;       // session snippet → 新規保存後
+  onSave?: () => void;
+  onSaveNew?: () => void;
   onOpenSession?: (id: string) => void;
+  collections?: SnippetCollection[];
 }
 
 function isSaved(s: PanelSnippet): s is SavedSnippet {
@@ -38,7 +39,7 @@ function getLang(language: string) {
   }
 }
 
-export function SnippetDetailPanel({ snippet, onClose, onSave, onSaveNew, onOpenSession }: Props) {
+export function SnippetDetailPanel({ snippet, onClose, onSave, onSaveNew, onOpenSession, collections = [] }: Props) {
   const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [editCode, setEditCode] = useState(snippet.code);

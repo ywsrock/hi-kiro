@@ -725,3 +725,75 @@ pub fn import_snippets(
     }
     Ok((imported, skipped))
 }
+
+// ── Collections ───────────────────────────────────────────────────────────────
+
+pub fn list_collections(conn: &Connection) -> Result<Vec<crate::types::SnippetCollection>> {
+    let mut stmt = conn.prepare(
+        r#"SELECT c.id, c.name, c.description, c.created_at,
+               COUNT(s.id) AS snippet_count
+           FROM snippet_collections c
+           LEFT JOIN saved_snippets s ON s.collection = c.name
+           GROUP BY c.id
+           ORDER BY c.name ASC"#,
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(crate::types::SnippetCollection {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            description: r.get(2)?,
+            created_at: r.get(3)?,
+            snippet_count: r.get(4)?,
+        })
+    })?;
+    Ok(rows.into_iter().flatten().collect())
+}
+
+pub fn create_collection(
+    conn: &Connection,
+    name: &str,
+    description: &str,
+) -> Result<crate::types::SnippetCollection> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO snippet_collections (id, name, description, created_at) VALUES (?1,?2,?3,?4)",
+        params![id, name, description, now],
+    )?;
+    Ok(crate::types::SnippetCollection {
+        id,
+        name: name.to_owned(),
+        description: description.to_owned(),
+        created_at: now,
+        snippet_count: 0,
+    })
+}
+
+pub fn delete_collection(conn: &Connection, id: &str) -> Result<()> {
+    // コレクションに属するスニペットの collection を空にしてから削除
+    conn.execute(
+        "UPDATE saved_snippets SET collection = '' WHERE collection = (SELECT name FROM snippet_collections WHERE id = ?1)",
+        params![id],
+    )?;
+    conn.execute("DELETE FROM snippet_collections WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
+pub fn set_snippet_collection(
+    conn: &Connection,
+    snippet_id: &str,
+    collection_name: &str,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE saved_snippets SET collection = ?1, updated_at = ?2 WHERE id = ?3",
+        params![
+            collection_name,
+            chrono::Utc::now().timestamp_millis(),
+            snippet_id
+        ],
+    )?;
+    Ok(())
+}

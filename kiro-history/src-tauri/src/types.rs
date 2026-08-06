@@ -279,3 +279,12 @@ pub enum ExportFormat {
     Html,
     Pdf,
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SnippetCollection {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub created_at: i64,
+    pub snippet_count: i64, // 集計値
+}

@@ -1,6 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 
+export interface SnippetCollection {
+  id: string;
+  name: string;
+  description: string;
+  created_at: number;
+  snippet_count: number;
+}
+
 export interface SnippetVersion {
   id: string;
   snippet_id: string;
@@ -194,6 +202,15 @@ export const api = {
   }) => invoke<import("./types").SessionSummary[]>("search_sessions_cursor", { params }),
 
   getSnippetTags: () => invoke<Array<[string, number]>>("get_snippet_tags"),
+
+  // ── コレクション ────────────────────────────────────────────────────────────
+  listSnippetCollections: () => invoke<SnippetCollection[]>("list_snippet_collections"),
+  createSnippetCollection: (name: string, description: string) =>
+    invoke<SnippetCollection>("create_snippet_collection", { name, description }),
+  deleteSnippetCollection: (id: string) =>
+    invoke<void>("delete_snippet_collection", { id }),
+  setSnippetCollection: (snippetId: string, collectionName: string) =>
+    invoke<void>("set_snippet_collection", { snippetId, collectionName }),
 
   // ── バージョン履歴 ──────────────────────────────────────────────────────────
   listSnippetVersions: (snippetId: string) =>

@@ -130,6 +130,31 @@ fn init_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_snippets_updated  ON saved_snippets(updated_at DESC);
     ")?;
 
+    // マイグレーション: collections テーブルと saved_snippets.collection カラム
+    conn.execute_batch(
+        r#"CREATE TABLE IF NOT EXISTS snippet_collections (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            created_at  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sc_name ON snippet_collections(name);"#,
+    )?;
+    // saved_snippets に collection カラムを追加（既存 DB では ALTER TABLE で追加）
+    let has_col: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('saved_snippets') WHERE name='collection'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    if !has_col {
+        conn.execute_batch(
+            "ALTER TABLE saved_snippets ADD COLUMN collection TEXT NOT NULL DEFAULT ''",
+        )?;
+    }
+
     // マイグレーション: snippet_versions テーブル（初回のみ）
     conn.execute_batch(
         r#"CREATE TABLE IF NOT EXISTS snippet_versions (

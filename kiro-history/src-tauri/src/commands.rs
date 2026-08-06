@@ -1096,3 +1096,44 @@ pub fn import_snippets(
     let s = state.lock().map_err(|e| e.to_string())?;
     crate::snippets::import_snippets(&s.index_conn, &items, overwrite).map_err(|e| e.to_string())
 }
+
+// ── Collections ───────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn list_snippet_collections(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<crate::types::SnippetCollection>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::list_collections(&s.index_conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_snippet_collection(
+    state: State<'_, Mutex<AppState>>,
+    name: String,
+    description: String,
+) -> Result<crate::types::SnippetCollection, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::create_collection(&s.index_conn, &name, &description)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_snippet_collection(
+    state: State<'_, Mutex<AppState>>,
+    id: String,
+) -> Result<(), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::delete_collection(&s.index_conn, &id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_snippet_collection(
+    state: State<'_, Mutex<AppState>>,
+    snippet_id: String,
+    collection_name: String,
+) -> Result<(), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::set_snippet_collection(&s.index_conn, &snippet_id, &collection_name)
+        .map_err(|e| e.to_string())
+}

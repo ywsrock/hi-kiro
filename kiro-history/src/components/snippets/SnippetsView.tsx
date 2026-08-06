@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, LayoutGrid, List, Star, Plus, BarChart2, X, Copy, Check, Download, Upload } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { Search, LayoutGrid, List, Star, Plus, BarChart2, X, Copy, Check, Download, Upload, Folder, FolderPlus } from "lucide-react";
 import { api } from "../../api";
-import type { ExportItem } from "../../api";
+import type { ExportItem, SnippetCollection } from "../../api";
 import { useToast } from "../ui/Toast";
 import { SnippetCard, SaveSnippetModal, langColor, LANG_COLORS } from "./SnippetCard";
 import { SnippetDetailPanel } from "./SnippetDetailPanel";
@@ -41,6 +41,10 @@ export function SnippetsView() {
   const [saveModal, setSaveModal] = useState<CodeSnippetWithSession | null>(null);
   const [detailSnippet, setDetailSnippet] = useState<import("../../types").SavedSnippet | CodeSnippetWithSession | null>(null);
   const [allSnippetTags, setAllSnippetTags] = useState<Array<[string, number]>>([]);
+  const [collections, setCollections] = useState<SnippetCollection[]>([]);
+  const [selectedCollection, setSelectedCollection] = useState<string>("");  // "" = 全件
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [showCollectionCreate, setShowCollectionCreate] = useState(false);
 
   // ── エクスポート ──
   const handleExport = async () => {
@@ -80,16 +84,7 @@ export function SnippetsView() {
     };
     input.click();
   };
-  const [previewModal, setPreviewModal] = useState<CodeSnippetWithSession | null>(null);
 
-  // Escape キーでプレビューモーダルを閉じる
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPreviewModal(null);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
 
   const debouncedQuery = useDebounce(query, 200);
 
@@ -125,16 +120,67 @@ export function SnippetsView() {
     api.getSnippetStats().then(setStats).catch(() => {});
   }, [savedSnippets]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts（Ctrl+K 検索 + ↑↓ナビ + Enter コピー + s スター + Esc 閉じ）
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") { e.preventDefault(); searchRef.current?.focus(); }
+      // テキスト入力中は何もしない
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        if ((e.ctrlKey || e.metaKey) && e.key === "k") { e.preventDefault(); searchRef.current?.focus(); }
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+
+      if (e.key === "Escape") {
+        setDetailSnippet(null);
+        return;
+      }
+
+      // 保存済みタブでのナビゲーション
+      if (tab === "saved" && savedSnippets.length > 0) {
+        const idx = selectedId ? savedSnippets.findIndex((s) => s.id === selectedId) : -1;
+
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          const next = savedSnippets[idx + 1];
+          if (next) { setSelectedId(next.id); setDetailSnippet(next); }
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          const prev = savedSnippets[idx - 1];
+          if (prev) { setSelectedId(prev.id); setDetailSnippet(prev); }
+          return;
+        }
+        if (e.key === "Enter" && selectedId) {
+          e.preventDefault();
+          const s = savedSnippets.find((x) => x.id === selectedId);
+          if (s) { api.copyToClipboard(s.code); api.incrementSnippetUse(s.id).catch(() => {}); toast.success("コピーしました"); }
+          return;
+        }
+        if (e.key === "s" && selectedId) {
+          e.preventDefault();
+          const s = savedSnippets.find((x) => x.id === selectedId);
+          if (s) { api.toggleSnippetStar(s.id).then(loadSaved).catch(() => {}); }
+          return;
+        }
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [tab, savedSnippets, selectedId, loadSaved]);
 
-  const countLabel = tab === "saved" ? `${savedSnippets.length} saved` : `${allSnippets.length} snippets`;
+  // コレクションフィルタ適用後のスニペット
+  const filteredByCollection = useMemo(() => {
+    if (!selectedCollection || tab !== "saved") return savedSnippets;
+    return savedSnippets.filter((s) => (s as (typeof s & { collection?: string })).collection === selectedCollection);
+  }, [savedSnippets, selectedCollection, tab]);
+
+  const countLabel = tab === "saved" ? `${filteredByCollection.length} saved` : `${allSnippets.length} snippets`;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -217,6 +263,56 @@ export function SnippetsView() {
           </div>
         )}
 
+        {/* Collection create panel */}
+        {showCollectionCreate && tab === "saved" && (
+          <div className="px-4 py-2.5 flex items-center gap-2" style={{ borderTop: "1px solid var(--border)", background: "var(--bg)" }}>
+            <FolderPlus size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+            <input
+              value={newCollectionName}
+              onChange={(e) => setNewCollectionName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newCollectionName.trim()) {
+                  api.createSnippetCollection(newCollectionName.trim(), "").then(() => {
+                    api.listSnippetCollections().then(setCollections);
+                    setSelectedCollection(newCollectionName.trim());
+                    setNewCollectionName("");
+                    setShowCollectionCreate(false);
+                    toast.success(`コレクション "${newCollectionName.trim()}" を作成しました`);
+                  }).catch((e: unknown) => toast.error(String(e)));
+                }
+              }}
+              placeholder="新しいコレクション名を入力 → Enter"
+              className="flex-1 text-xs px-3 py-1.5 rounded-lg outline-none"
+              style={{ background: "var(--surface)", border: "1px solid var(--accent)", color: "var(--text-primary)" }}
+              autoFocus
+            />
+            {collections.length > 0 && (
+              <div className="flex items-center gap-1 flex-wrap">
+                {collections.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      if (window.confirm(`コレクション "${c.name}" を削除しますか？
+スニペットは削除されません。`)) {
+                        api.deleteSnippetCollection(c.id).then(() => {
+                          api.listSnippetCollections().then(setCollections);
+                          if (selectedCollection === c.name) setSelectedCollection("");
+                          toast.success("削除しました");
+                        }).catch((e: unknown) => toast.error(String(e)));
+                      }
+                    }}
+                    className="text-xs px-2 py-0.5 rounded cursor-pointer"
+                    style={{ background: "var(--border)", color: "var(--text-muted)" }}
+                    title={`削除: ${c.name}`}
+                  >
+                    {c.name} ×
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Search row */}
         <div className="flex items-center gap-2 px-4 py-2">
           <div className="flex items-center gap-2 flex-1 px-3 py-1.5 rounded-lg"
@@ -235,6 +331,16 @@ export function SnippetsView() {
             <option value="">全言語</option>
             {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
+          {tab === "saved" && (
+            <select value={selectedCollection} onChange={(e) => setSelectedCollection(e.target.value)}
+              className="text-xs px-2 py-1.5 rounded-lg cursor-pointer"
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: selectedCollection ? "var(--accent)" : "var(--text-secondary)" }}>
+              <option value="">全コレクション</option>
+              {collections.map((c) => (
+                <option key={c.id} value={c.name}>{c.name} ({c.snippet_count})</option>
+              ))}
+            </select>
+          )}
           {tab === "saved" && (
             <>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)}
@@ -348,6 +454,7 @@ export function SnippetsView() {
           sessionTitle={saveModal.session_title}
           onClose={() => setSaveModal(null)}
           onSaved={() => { loadSaved(); setTab("saved"); }}
+          allTags={allSnippetTags}
         />
       )}
     </div>

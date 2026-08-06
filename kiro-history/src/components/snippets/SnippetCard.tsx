@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Star, Copy, Check, Trash2, Edit2, ExternalLink, Save, X, Zap, GitBranch } from "lucide-react";
 import { api } from "../../api";
 import { useToast } from "../ui/Toast";
@@ -19,13 +19,26 @@ interface SaveSnippetModalProps {
   language: string; code: string;
   sessionId?: string; sessionTitle?: string; cwd?: string;
   onClose: () => void; onSaved: (s: SavedSnippet) => void;
+  allTags?: Array<[string, number]>;
 }
-export function SaveSnippetModal({ language, code, sessionId, sessionTitle, cwd, onClose, onSaved }: SaveSnippetModalProps) {
+export function SaveSnippetModal({ language, code, sessionId, sessionTitle, cwd, onClose, onSaved, allTags = [] }: SaveSnippetModalProps) {
   const toast = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [tagFocused, setTagFocused] = useState(false);
+  const tagInputRef = useRef<HTMLInputElement>(null);
+
+  // allTags から tagInput に一致する候補を絞り込む
+  const tagSuggestions = useMemo(() => {
+    const q = tagInput.toLowerCase().trim();
+    if (!q) return allTags.slice(0, 8).map(([t]: [string, number]) => t);
+    return allTags
+      .filter(([t]: [string, number]) => t.toLowerCase().includes(q) && !tags.includes(t))
+      .slice(0, 8)
+      .map(([t]: [string, number]) => t);
+  }, [tagInput, allTags, tags]);
   const [loading, setLoading] = useState(false);
   const [suggested, setSuggested] = useState("");
   const titleRef = useRef<HTMLDivElement>(null);
@@ -105,11 +118,47 @@ export function SaveSnippetModal({ language, code, sessionId, sessionTitle, cwd,
                 </span>
               ))}
             </div>
-            <input value={tagInput} onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addTag()}
-              placeholder="タグを入力してEnter..."
-              className="w-full px-3 py-1.5 rounded-lg text-xs outline-none"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+            <div className="relative">
+              <input
+                ref={tagInputRef}
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onFocus={() => setTagFocused(true)}
+                onBlur={() => setTimeout(() => setTagFocused(false), 150)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); addTag(); }
+                  if (e.key === "Escape") setTagFocused(false);
+                }}
+                placeholder="タグを入力してEnter... (既存タグをサジェスト)"
+                className="w-full px-3 py-1.5 rounded-lg text-xs outline-none"
+                style={{ background: "var(--bg)", border: `1px solid ${tagFocused ? "var(--accent)" : "var(--border)"}`, color: "var(--text-primary)" }}
+              />
+              {tagFocused && tagSuggestions.length > 0 && (
+                <div
+                  className="absolute left-0 right-0 z-50 rounded-lg shadow-lg overflow-hidden"
+                  style={{ top: "calc(100% + 2px)", background: "var(--surface)", border: "1px solid var(--border)" }}
+                >
+                  {tagSuggestions.map((suggestion: string) => (
+                    <button
+                      key={suggestion}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        if (!tags.includes(suggestion)) setTags([...tags, suggestion]);
+                        setTagInput("");
+                        tagInputRef.current?.focus();
+                      }}
+                      className="flex items-center justify-between w-full px-3 py-1.5 text-xs text-left cursor-pointer"
+                      style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--border)" }}
+                    >
+                      <span>{suggestion}</span>
+                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        {allTags.find(([t]: [string, number]) => t === suggestion)?.[1] ?? 0}件
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center justify-end gap-3 px-5 py-3" style={{ borderTop: "1px solid var(--border)" }}>
