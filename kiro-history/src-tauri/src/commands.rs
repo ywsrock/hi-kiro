@@ -1022,6 +1022,12 @@ pub fn save_config_cmd(config: crate::state::AppConfig) -> Result<(), String> {
             .theme
             .or(existing.theme)
             .or(Some("system".to_string())),
+        palette_shortcut_key: config
+            .palette_shortcut_key
+            .or(existing.palette_shortcut_key),
+        palette_shortcut_enabled: config
+            .palette_shortcut_enabled
+            .or(existing.palette_shortcut_enabled),
     };
     crate::state::save_config(&merged).map_err(|e| e.to_string())
 }

@@ -54,9 +54,11 @@ export function SaveSnippetModal({ language, code, sessionId, sessionTitle, cwd,
     });
     // 類似スニペットを事前チェック
     api.findSimilarSnippets(code, language).then((sims) => {
+      console.log("[dup-check] sims:", sims.length, sims.map(s => s.similarity));
       const high = sims.filter((s) => s.similarity >= 0.8);
+      console.log("[dup-check] high:", high.length);
       setDuplicates(high);
-    }).catch(() => {});
+    }).catch((e) => { console.error("[dup-check] error:", e); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addTag = () => {
