@@ -234,7 +234,37 @@ pub fn parse_jsonl_messages(jsonl_path: &Path) -> Result<Vec<Message>> {
                     });
                 }
             }
-            _ => {} // Skip ToolUse, ToolResults, etc.
+            "ToolResults" => {
+                // ToolResults: data.tool_use_results[].content[].text
+                // ツール実行結果にコードが含まれることが多い（ファイル読み取り等）
+                let results = record["data"]["tool_use_results"].as_array();
+                if let Some(results) = results {
+                    let mut combined = String::new();
+                    for result in results {
+                        let content_arr = result["content"].as_array();
+                        if let Some(items) = content_arr {
+                            for item in items {
+                                if item["type"].as_str() == Some("text") {
+                                    if let Some(text) = item["text"].as_str() {
+                                        if !combined.is_empty() {
+                                            combined.push('\n');
+                                        }
+                                        combined.push_str(text);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !combined.is_empty() {
+                        messages.push(Message {
+                            role: MessageRole::Assistant,
+                            content: combined,
+                            timestamp: None,
+                        });
+                    }
+                }
+            }
+            _ => {} // Skip ToolUse, etc.
         }
     }
     Ok(messages)
