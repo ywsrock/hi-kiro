@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { ViewTabs, type CalendarView } from "./ViewTabs";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis,
   Tooltip, ResponsiveContainer, CartesianGrid, RadarChart,
@@ -11,6 +12,13 @@ import type { StatsData } from "../../types";
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const ACCENT = "#22C55E";
+
+function formatDuration(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (h > 0) return `${h}時間${m > 0 ? m + "分" : ""}`;
+  return `${m}分`;
+}
 const ACCENT2 = "#16A34A";
 const MODEL_COLORS = ["#22C55E", "#60A5FA", "#F59E0B", "#A78BFA", "#F472B6", "#34D399"];
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
@@ -93,40 +101,49 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export function DashboardView() {
   const [stats, setStats] = useState<StatsData | null>(null);
-  const [calendarView, setCalendarView] = useState<"day" | "week" | "month">("day");
+  const [calendarView, setCalendarView] = useState<CalendarView>("day");
+  const [durationView, setDurationView] = useState<CalendarView>("day");
 
   useEffect(() => {
     api.getStats().then(setStats).catch(console.error);
   }, []);
 
-  // 週次集計（月曜始まり）— stats が null のときは空配列
-  const weeklyData = useMemo(() => {
-    if (!stats) return [];
+  // 汎用週次集計（月曜始まり）
+  function aggregateByWeek(daily: { date: string; value: number }[]) {
     const map = new Map<string, number>();
-    for (const d of stats.sessions_by_date) {
+    for (const d of daily) {
       const date = new Date(d.date + "T00:00:00");
       const monday = new Date(date);
       monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
       const key = monday.toISOString().slice(0, 10);
-      map.set(key, (map.get(key) ?? 0) + d.count);
+      map.set(key, (map.get(key) ?? 0) + d.value);
     }
-    return [...map.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([week, count]) => ({ week, count }));
-  }, [stats]);
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([week, value]) => ({ week, value }));
+  }
 
-  // 月次集計
-  const monthlyData = useMemo(() => {
-    if (!stats) return [];
+  // 汎用月次集計
+  function aggregateByMonth(daily: { date: string; value: number }[]) {
     const map = new Map<string, number>();
-    for (const d of stats.sessions_by_date) {
+    for (const d of daily) {
       const key = d.date.slice(0, 7);
-      map.set(key, (map.get(key) ?? 0) + d.count);
+      map.set(key, (map.get(key) ?? 0) + d.value);
     }
-    return [...map.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, count]) => ({ month, count }));
-  }, [stats]);
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([month, value]) => ({ month, value }));
+  }
+
+  const sessionDailyBase = useMemo(
+    () => (stats?.sessions_by_date ?? []).map((d) => ({ date: d.date, value: d.count })),
+    [stats]
+  );
+  const weeklyData = useMemo(() => aggregateByWeek(sessionDailyBase), [sessionDailyBase]);
+  const monthlyData = useMemo(() => aggregateByMonth(sessionDailyBase), [sessionDailyBase]);
+
+  const durationDailyBase = useMemo(
+    () => (stats?.duration_by_date ?? []).map((d) => ({ date: d.date, value: d.duration_secs })),
+    [stats]
+  );
+  const durationWeekly = useMemo(() => aggregateByWeek(durationDailyBase), [durationDailyBase]);
+  const durationMonthly = useMemo(() => aggregateByMonth(durationDailyBase), [durationDailyBase]);
 
   if (!stats) {
     return (
@@ -370,22 +387,7 @@ export function DashboardView() {
           <div className="flex items-center justify-between mb-3">
             <SectionTitle>📊 活動カレンダー</SectionTitle>
             {/* 日/週/月 切り替えタブ */}
-            <div className="flex items-center rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-              {(["day", "week", "month"] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setCalendarView(v)}
-                  className="px-3 py-1 text-xs cursor-pointer"
-                  style={{
-                    background: calendarView === v ? "var(--accent)" : "transparent",
-                    color: calendarView === v ? "#000" : "var(--text-muted)",
-                    transition: "background 0.15s",
-                  }}
-                >
-                  {v === "day" ? "日" : v === "week" ? "週" : "月"}
-                </button>
-              ))}
-            </div>
+              <ViewTabs value={calendarView} onChange={setCalendarView} />
           </div>
 
           {/* 日ビュー: GitHub風ヒートマップ */}
@@ -431,7 +433,7 @@ export function DashboardView() {
           {/* 週ビュー: 棒グラフ（recharts） */}
           {calendarView === "week" && (
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={weeklyData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+              <BarChart data={weeklyData.map((d) => ({ ...d, count: d.value }))} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
                 <XAxis
                   dataKey="week"
                   tick={{ fontSize: 10, fill: "var(--text-muted)" }}
@@ -443,7 +445,7 @@ export function DashboardView() {
                   formatter={(v: number) => [v, "セッション数"]}
                   labelFormatter={(w: string) => `週: ${w}`}
                 />
-                <Bar dataKey="count" name="セッション" fill={ACCENT} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="count" name="セッション数" fill={ACCENT} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -451,7 +453,7 @@ export function DashboardView() {
           {/* 月ビュー: 棒グラフ（recharts） */}
           {calendarView === "month" && (
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={monthlyData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+              <BarChart data={monthlyData.map((d) => ({ ...d, count: d.value }))} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
                 <XAxis
                   dataKey="month"
                   tick={{ fontSize: 10, fill: "var(--text-muted)" }}
@@ -469,7 +471,98 @@ export function DashboardView() {
                     return `${y}年${parseInt(mo)}月`;
                   }}
                 />
-                <Bar dataKey="count" name="セッション" fill={ACCENT} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="count" name="セッション数" fill={ACCENT} radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+
+        {/* ── Duration Calendar ───────────────────────────────────────────── */}
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <SectionTitle>⏱️ 総作業時間</SectionTitle>
+            <ViewTabs value={durationView} onChange={setDurationView} />
+          </div>
+
+          {/* 日ビュー: ヒートマップ（秒単位のしきい値） */}
+          {durationView === "day" && (
+            <>
+              <div className="overflow-x-auto">
+                <CalendarHeatmap
+                  startDate={startDate}
+                  endDate={endDate}
+                  values={(stats.duration_by_date ?? []).map((d) => ({ date: d.date, count: d.duration_secs }))}
+                  classForValue={(value) => {
+                    const s = value?.count ?? 0;
+                    if (!value || s === 0) return "color-empty";
+                    if (s >= 3600 * 3) return "color-scale-4"; // 3時間以上
+                    if (s >= 3600)      return "color-scale-3"; // 1時間以上
+                    if (s >= 1800)      return "color-scale-2"; // 30分以上
+                    return "color-scale-1";
+                  }}
+                  titleForValue={(value) =>
+                    value ? `${value.date}: ${formatDuration(value.count ?? 0)}` : "活動なし"
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                <span>少</span>
+                {["#166534","#15803D","#16A34A","#22C55E"].map((c) => (
+                  <div key={c} className="w-3 h-3 rounded-sm" style={{ background: c }} />
+                ))}
+                <span>多</span>
+              </div>
+            </>
+          )}
+
+          {/* 週ビュー */}
+          {durationView === "week" && (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={durationWeekly} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <XAxis
+                  dataKey="week"
+                  tick={{ fontSize: 10, fill: "var(--text-muted)" }}
+                  tickFormatter={(w: string) => w.slice(5)}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "var(--text-muted)" }}
+                  tickFormatter={(v: number) => v >= 3600 ? `${Math.round(v / 3600)}h` : `${Math.round(v / 60)}m`}
+                />
+                <Tooltip
+                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", fontSize: 12 }}
+                  formatter={(v: number) => [formatDuration(v), "作業時間"]}
+                  labelFormatter={(w: string) => `週: ${w}`}
+                />
+                <Bar dataKey="value" name="作業時間" fill={ACCENT} radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+
+          {/* 月ビュー */}
+          {durationView === "month" && (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={durationMonthly} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: 10, fill: "var(--text-muted)" }}
+                  tickFormatter={(m: string) => {
+                    const [y, mo] = m.split("-");
+                    return `${y.slice(2)}/${mo}`;
+                  }}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "var(--text-muted)" }}
+                  tickFormatter={(v: number) => v >= 3600 ? `${Math.round(v / 3600)}h` : `${Math.round(v / 60)}m`}
+                />
+                <Tooltip
+                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", fontSize: 12 }}
+                  formatter={(v: number) => [formatDuration(v), "作業時間"]}
+                  labelFormatter={(m: string) => {
+                    const [y, mo] = m.split("-");
+                    return `${y}年${parseInt(mo)}月`;
+                  }}
+                />
+                <Bar dataKey="value" name="作業時間" fill={ACCENT2} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

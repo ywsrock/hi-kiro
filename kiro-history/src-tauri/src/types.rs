@@ -112,6 +112,12 @@ pub struct CwdCount {
     pub total_tool_uses: i64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DateDuration {
+    pub date: String, // "YYYY-MM-DD"
+    pub duration_secs: i64,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DateCount {
     pub date: String, // "YYYY-MM-DD"
@@ -146,6 +152,7 @@ pub struct StatsData {
     pub sessions_by_model: Vec<ModelCount>,
     pub sessions_by_cwd: Vec<CwdCount>,
     pub sessions_by_date: Vec<DateCount>,
+    pub duration_by_date: Vec<DateDuration>, // 日別作業時間
     pub avg_context_pct: f32,
     pub most_used_tags: Vec<TagStat>,
 

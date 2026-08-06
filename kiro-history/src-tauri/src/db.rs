@@ -517,6 +517,23 @@ pub fn get_stats(
         .flatten()
         .collect();
 
+    // Duration by date (daily, last 365 days)
+    let mut stmt = conn.prepare(
+        "SELECT strftime('%Y-%m-%d', datetime(updated_at/1000, 'unixepoch', 'localtime')) as d,
+                COALESCE(SUM(total_duration_secs), 0) as secs
+         FROM sessions_meta WHERE updated_at > (strftime('%s','now') - 365*86400) * 1000
+         GROUP BY d ORDER BY d",
+    )?;
+    let duration_by_date: Vec<crate::types::DateDuration> = stmt
+        .query_map([], |r| {
+            Ok(crate::types::DateDuration {
+                date: r.get(0)?,
+                duration_secs: r.get(1)?,
+            })
+        })?
+        .flatten()
+        .collect();
+
     // By hour (local time via 'localtime' modifier)
     let mut stmt = conn.prepare(
         "SELECT CAST(strftime('%H', datetime(updated_at/1000, 'unixepoch', 'localtime')) AS INTEGER) as h,
@@ -616,6 +633,7 @@ pub fn get_stats(
         sessions_by_model,
         sessions_by_cwd,
         sessions_by_date,
+        duration_by_date,
         avg_context_pct,
         most_used_tags,
         total_duration_secs,

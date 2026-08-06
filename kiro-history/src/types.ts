@@ -93,6 +93,11 @@ export interface CwdCount {
   total_tool_uses: number;
 }
 
+export interface DateDuration {
+  date: string;
+  duration_secs: number;
+}
+
 export interface DateCount {
   date: string;
   count: number;
@@ -121,6 +126,7 @@ export interface StatsData {
   sessions_by_model: ModelCount[];
   sessions_by_cwd: CwdCount[];
   sessions_by_date: DateCount[];
+  duration_by_date: DateDuration[];
   avg_context_pct: number;
   most_used_tags: TagStat[];
 
