@@ -502,7 +502,7 @@ pub fn get_stats(
 
     // Sessions by date (daily, last 365 days)
     let mut stmt = conn.prepare(
-        "SELECT strftime('%Y-%m-%d', datetime(updated_at/1000, 'unixepoch')) as d,
+        "SELECT strftime('%Y-%m-%d', datetime(updated_at/1000, 'unixepoch', 'localtime')) as d,
                 COUNT(*) as cnt
          FROM sessions_meta WHERE updated_at > (strftime('%s','now') - 365*86400) * 1000
          GROUP BY d ORDER BY d",
@@ -517,9 +517,9 @@ pub fn get_stats(
         .flatten()
         .collect();
 
-    // By hour (local time via unixepoch)
+    // By hour (local time via 'localtime' modifier)
     let mut stmt = conn.prepare(
-        "SELECT CAST(strftime('%H', datetime(updated_at/1000, 'unixepoch')) AS INTEGER) as h,
+        "SELECT CAST(strftime('%H', datetime(updated_at/1000, 'unixepoch', 'localtime')) AS INTEGER) as h,
                 COUNT(*) as cnt
          FROM sessions_meta WHERE updated_at > 0
          GROUP BY h ORDER BY h",
@@ -542,7 +542,7 @@ pub fn get_stats(
 
     // By weekday (0=Sun in strftime)
     let mut stmt = conn.prepare(
-        "SELECT CAST(strftime('%w', datetime(updated_at/1000, 'unixepoch')) AS INTEGER) as wd,
+        "SELECT CAST(strftime('%w', datetime(updated_at/1000, 'unixepoch', 'localtime')) AS INTEGER) as wd,
                 COUNT(*) as cnt
          FROM sessions_meta WHERE updated_at > 0
          GROUP BY wd ORDER BY wd",
