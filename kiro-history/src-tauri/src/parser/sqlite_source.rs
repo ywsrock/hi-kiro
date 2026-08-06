@@ -180,6 +180,14 @@ fn extract_meta_only(
                 message_count += 1;
             }
         }
+        // request_metadata から実リクエスト時間を積算
+        if let Some(rm) = turn.get("request_metadata") {
+            let start = rm["request_start_timestamp_ms"].as_i64().unwrap_or(0);
+            let end = rm["stream_end_timestamp_ms"].as_i64().unwrap_or(0);
+            if end > start {
+                total_duration_secs += (end - start) / 1000;
+            }
+        }
     }
 
     // Extract turn metadata (lightweight)
