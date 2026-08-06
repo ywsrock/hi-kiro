@@ -188,7 +188,14 @@ pub async fn rebuild_index(
     index::rebuild_index(&conn, &sessions_dir, &sqlite_db_path, Some(&app))
         .map_err(|e| e.to_string())?;
 
-    // Update the shared connection's stats
+    // スニペットキャッシュを無効化（再構築後の全セッションタブ更新のため）
+    if let Ok(guard) = state.lock() {
+        if let Ok(mut cache) = guard.snippets_cache.write() {
+            cache.dir_mtime = None;
+            cache.sessions.clear();
+        }
+    }
+
     Ok(())
 }
 
@@ -597,10 +604,13 @@ pub fn get_all_snippets(
     let lang = lang_filter;
 
     // ── mtimeベースキャッシュでJSONL全件再スキャンを回避 ─────────────────────────
-    // sessions_dir の mtime を取得（ファイル追加・更新の検出）
-    let current_mtime = std::fs::metadata(&sessions_dir)
-        .and_then(|m| m.modified())
-        .ok();
+    // sessions_dir 内の最新ファイルの mtime を取得（ファイル追加・変更の両方を検出）
+    let current_mtime = std::fs::read_dir(&sessions_dir).ok().and_then(|entries| {
+        entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| e.metadata().ok().and_then(|m| m.modified().ok()))
+            .max()
+    });
 
     // キャッシュが有効か確認（読み取りロック）
     let cached_sessions: Option<Vec<std::sync::Arc<crate::models::Session>>> = {
