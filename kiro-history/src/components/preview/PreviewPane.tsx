@@ -290,12 +290,10 @@ function MessageBubble({
                     <button
                       onClick={() => {
                         setOpen(false);
-                        // コードブロックを抽出、なければ全文を text として保存
-                        const codeBlockRe = /```(\w*)\n([\s\S]*?)```/;
-                        const codeMatch = content.match(codeBlockRe);
+                        // メッセージ全文をそのままスニペットとして保存（Copy と同じ範囲）
                         setSaveModal({
-                          code: codeMatch ? codeMatch[2].trim() : content,
-                          language: codeMatch?.[1] || "text",
+                          code: content,
+                          language: "markdown",
                         });
                       }}
                       className="w-full text-left px-3 py-1.5 text-xs cursor-pointer flex items-center gap-2"
