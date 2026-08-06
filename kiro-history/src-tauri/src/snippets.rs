@@ -253,7 +253,10 @@ fn normalize_code(code: &str) -> Vec<String> {
     code.lines()
         .map(|l| l.trim().to_lowercase())
         .filter(|l| {
-            !l.is_empty() && !l.starts_with("//") && !l.starts_with("#") && !l.starts_with("--")
+            !l.is_empty()
+                && !l.starts_with("//")
+                // markdown の見出し (#) は除外しない
+                && !l.starts_with("--")
         })
         .flat_map(|l| {
             l.split_whitespace()
