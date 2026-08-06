@@ -146,11 +146,19 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export function DashboardView() {
   const [stats, setStats] = useState<StatsData | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
   const [calendarView, setCalendarView] = useState<CalendarView>("day");
   const [durationView, setDurationView] = useState<"day" | "week" | "month" | "all">("all");
 
   useEffect(() => {
-    api.getStats().then(setStats).catch(console.error);
+    // Dashboard を開くたびにインデックスを再構築してから統計を取得
+    setRebuilding(true);
+    api.rebuildIndex()
+      .catch(console.error)
+      .finally(() => {
+        setRebuilding(false);
+        api.getStats().then(setStats).catch(console.error);
+      });
   }, []);
 
   // 汎用週次集計（月曜始まり）
@@ -305,9 +313,11 @@ export function DashboardView() {
                 : durationView === "month" ? "今月の作業時間"
                 : "総作業時間"
               }
-              value={durationPeriod.hasData ? fmtDuration(durationPeriod.totalSecs) : "データなし"}
+              value={rebuilding ? "計算中..." : durationPeriod.hasData ? fmtDuration(durationPeriod.totalSecs) : "データなし"}
               sub={
-                durationPeriod.hasData
+                rebuilding
+                  ? "インデックスを再構築中..."
+                  : durationPeriod.hasData
                   ? `平均 ${fmtDuration(Math.round(durationPeriod.avgSecs))}/session`
                   : "この期間の記録がありません"
               }
