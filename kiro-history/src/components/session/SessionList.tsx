@@ -1,4 +1,5 @@
 import { useRef, useCallback, useState, memo, useMemo } from "react";
+import { ConfirmDialog } from "../ui/ModalShell";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Star, Copy, Check, Trash2 } from "lucide-react";
 import { useToast } from "../ui/Toast";
@@ -189,6 +190,8 @@ export function SessionList({
   const parentRef = useRef<HTMLDivElement>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteSession, setConfirmDeleteSession] = useState<import("../../types").SessionSummary | null>(null);
+  const [confirmDeleteMultiple, setConfirmDeleteMultiple] = useState<string[] | null>(null);
 
   const virtualizer = useVirtualizer({
     count: sessions.length,
@@ -207,15 +210,11 @@ export function SessionList({
   );
 
   const handleDelete = useCallback(
-    async (e: React.MouseEvent, session: SessionSummary) => {
+    (e: React.MouseEvent, session: SessionSummary) => {
       e.stopPropagation();
-      const title = session.title || "このセッション";
-      const ok = await api.confirmDelete(
-        `「${title}」を削除しますか？\nこの操作は取り消せません。`
-      );
-      if (ok) onDeleteMultiple?.([session.session_id]);
+      setConfirmDeleteSession(session);
     },
-    [onDeleteMultiple]
+    []
   );
 
   // loadMore 重複発火防止: stateの非同期更新に依存しない即時ロック
@@ -290,6 +289,7 @@ export function SessionList({
   }
 
   return (
+    <>
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Toolbar */}
       <div
@@ -325,12 +325,7 @@ export function SessionList({
             </span>
             {checkedIds.size > 0 && (
               <button
-                onClick={async () => {
-                  const ok = await api.confirmDelete(
-                    `選択した ${checkedIds.size} 件のセッションを削除しますか？\nこの操作は取り消せません。`
-                  );
-                  if (ok) onDeleteMultiple?.(Array.from(checkedIds));
-                }}
+                onClick={() => setConfirmDeleteMultiple(Array.from(checkedIds))}
                 className="text-xs px-2 py-1 rounded cursor-pointer font-medium"
                 style={{ background: "#EF4444", color: "#fff" }}
               >
@@ -519,5 +514,37 @@ export function SessionList({
         </div>
       )}
     </div>
+      {/* 単件削除確認 */}
+      {confirmDeleteSession && (
+        <ConfirmDialog
+          title="セッションを削除"
+          message={<>「<strong>{confirmDeleteSession.title || "このセッション"}</strong>」を削除します。この操作は取り消せません。</>}
+          confirmLabel="削除する"
+          danger
+          onConfirm={() => {
+            onDeleteMultiple?.([confirmDeleteSession.session_id]);
+            setConfirmDeleteSession(null);
+          }}
+          onCancel={() => setConfirmDeleteSession(null)}
+        />
+      )}
+
+      {/* 複数選択削除確認 */}
+      {confirmDeleteMultiple && (
+        <ConfirmDialog
+          title="セッションを削除"
+          message={`選択した ${confirmDeleteMultiple.length} 件のセッションを削除します。この操作は取り消せません。`}
+          confirmLabel={`削除する (${confirmDeleteMultiple.length}件)`}
+          danger
+          onConfirm={() => {
+            onDeleteMultiple?.(confirmDeleteMultiple);
+            setCheckedIds(new Set());
+            setSelectMode(false);
+            setConfirmDeleteMultiple(null);
+          }}
+          onCancel={() => setConfirmDeleteMultiple(null)}
+        />
+      )}
+    </>
   );
 }
