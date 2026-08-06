@@ -206,6 +206,7 @@ export interface SnippetSearchParams {
   tags?: string[];
   starred_only?: boolean;
   sort_by?: "recent" | "used" | "starred";
+  limit?: number;
 }
 
 export interface SimilarSnippet {

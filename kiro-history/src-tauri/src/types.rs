@@ -243,6 +243,7 @@ pub struct SnippetSearchParams {
     pub tags: Option<Vec<String>>,
     pub starred_only: Option<bool>,
     pub sort_by: Option<String>, // "recent" | "used" | "starred"
+    pub limit: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

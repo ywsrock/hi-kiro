@@ -174,7 +174,8 @@ pub fn search_saved_snippets(
         _ => "ORDER BY updated_at DESC",
     };
 
-    let sql = format!("{}{} {} LIMIT 500", base, where_extra, order);
+    let limit = params_in.limit.unwrap_or(500);
+    let sql = format!("{}{} {} LIMIT {}", base, where_extra, order, limit);
     let mut stmt = conn.prepare(&sql)?;
 
     let rows = if use_fts {

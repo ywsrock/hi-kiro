@@ -213,7 +213,8 @@ export function CleanupView() {
       const [dups, unusedList, all] = await Promise.all([
         api.findDuplicateGroups(0.8),
         api.findUnusedSnippets(90),
-        api.quickSearchSnippets(""),
+        // 全件取得（limit なし）して重複グループのスニペットを表示できるようにする
+        api.searchSavedSnippets({ query: "", limit: 9999 }),
       ]);
       setDuplicates(dups);
       setUnused(unusedList);
