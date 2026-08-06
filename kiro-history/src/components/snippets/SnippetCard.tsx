@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Star, Copy, Check, Trash2, Edit2, ExternalLink, Save, X, Zap, GitBranch } from "lucide-react";
 import { api } from "../../api";
 import { useToast } from "../ui/Toast";
@@ -42,15 +42,22 @@ export function SaveSnippetModal({ language, code, sessionId, sessionTitle, cwd,
   }, [tagInput, allTags, tags]);
   const [loading, setLoading] = useState(false);
   const [suggested, setSuggested] = useState("");
+  const [duplicates, setDuplicates] = useState<SimilarSnippet[]>([]);
+  const [showDupWarn, setShowDupWarn] = useState(false);
   const titleRef = useRef<HTMLDivElement>(null);
 
-  useState(() => {
+  useEffect(() => {
     api.suggestSnippetTitle(language, code).then((t) => {
       setSuggested(t);
       setTitle(t);
       if (titleRef.current) titleRef.current.innerText = t;
     });
-  });
+    // 類似スニペットを事前チェック
+    api.findSimilarSnippets(code, language).then((sims) => {
+      const high = sims.filter((s) => s.similarity >= 0.9);
+      setDuplicates(high);
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addTag = () => {
     const t = tagInput.trim();
@@ -58,7 +65,7 @@ export function SaveSnippetModal({ language, code, sessionId, sessionTitle, cwd,
     setTagInput("");
   };
 
-  const handleSave = async () => {
+  const doSave = async () => {
     setLoading(true);
     try {
       const saved = await api.saveSnippet({
@@ -70,6 +77,15 @@ export function SaveSnippetModal({ language, code, sessionId, sessionTitle, cwd,
       onSaved(saved); onClose();
     } catch (e) { toast.error(`保存エラー: ${e}`); }
     finally { setLoading(false); }
+  };
+
+  const handleSave = () => {
+    if (duplicates.length > 0 && !showDupWarn) {
+      // 初回: 重複警告を表示して確認を求める
+      setShowDupWarn(true);
+      return;
+    }
+    doSave();
   };
 
   return (
