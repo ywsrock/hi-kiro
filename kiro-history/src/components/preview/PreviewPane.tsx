@@ -32,9 +32,10 @@ hljs.registerLanguage("html", xml);
 hljs.registerLanguage("xml", xml);
 hljs.registerLanguage("go", go);
 hljs.registerLanguage("java", java);
-import { Copy, Check, RotateCcw, Download, ChevronDown, ChevronRight, Tag, X, Pencil } from "lucide-react";
+import { Copy, Check, RotateCcw, Download, ChevronDown, ChevronRight, Tag, X, Pencil, Scissors } from "lucide-react";
 import { useToast } from "../ui/Toast";
 import type { SessionDetail, SessionSummary } from "../../types";
+import { SaveSnippetModal } from "../snippets/SnippetCard";
 import { api } from "../../api";
 
 interface PreviewPaneProps {
@@ -125,9 +126,13 @@ function CopyDropdown({ content }: { content: string }) {
 function VirtualMessageList({
   messages,
   scrollRef,
+  sessionId,
+  sessionTitle,
 }: {
   messages: Array<{ role: string; content: string }>;
   scrollRef: React.RefObject<HTMLDivElement | null>;
+  sessionId?: string;
+  sessionTitle?: string;
 }) {
   const virtualizer = useVirtualizer({
     count: messages.length,
@@ -173,7 +178,7 @@ function VirtualMessageList({
                   transform: `translateY(${item.start}px)`,
                 }}
               >
-                <MessageBubble role={msg.role as "User" | "Kiro"} content={msg.content} />
+                <MessageBubble role={msg.role as "User" | "Kiro"} content={msg.content} sessionId={sessionId} sessionTitle={sessionTitle} />
               </div>
             );
           })}
@@ -183,10 +188,18 @@ function VirtualMessageList({
   );
 }
 
-function MessageBubble({ role, content }: { role: "User" | "Kiro"; content: string }) {
+function MessageBubble({
+  role, content, sessionId, sessionTitle
+}: {
+  role: "User" | "Kiro";
+  content: string;
+  sessionId?: string;
+  sessionTitle?: string;
+}) {
   const [showCopy, setShowCopy] = useState(false);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [saveModal, setSaveModal] = useState<{ code: string; language: string } | null>(null);
   // IntersectionObserver による遅延ハイライト
   // ビューポートに入ってから初めてrehypeHighlightを有効化
   const [visible, setVisible] = useState(false);
@@ -273,6 +286,24 @@ function MessageBubble({ role, content }: { role: "User" | "Kiro"; content: stri
                   >
                     <button onClick={() => copyAs(true)} className="w-full text-left px-3 py-1.5 text-xs cursor-pointer" style={{ color: "var(--text-primary)" }}>Copy as Markdown</button>
                     <button onClick={() => copyAs(false)} className="w-full text-left px-3 py-1.5 text-xs cursor-pointer" style={{ color: "var(--text-primary)" }}>Copy as Plain Text</button>
+                    <div style={{ height: 1, background: "var(--border)", margin: "2px 8px" }} />
+                    <button
+                      onClick={() => {
+                        setOpen(false);
+                        // コードブロックを抽出、なければ全文を text として保存
+                        const codeBlockRe = /```(\w*)\n([\s\S]*?)```/;
+                        const codeMatch = content.match(codeBlockRe);
+                        setSaveModal({
+                          code: codeMatch ? codeMatch[2].trim() : content,
+                          language: codeMatch?.[1] || "text",
+                        });
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs cursor-pointer flex items-center gap-2"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      <Scissors size={11} />
+                      スニペットとして保存
+                    </button>
                   </div>
                 </>
               )}
@@ -316,6 +347,17 @@ function MessageBubble({ role, content }: { role: "User" | "Kiro"; content: stri
           </div>
         )}
       </div>
+      {/* スニペット保存モーダル */}
+      {saveModal && (
+        <SaveSnippetModal
+          code={saveModal.code}
+          language={saveModal.language}
+          sessionId={sessionId}
+          sessionTitle={sessionTitle}
+          onClose={() => setSaveModal(null)}
+          onSaved={() => setSaveModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -654,6 +696,8 @@ export function PreviewPane({ sessionId, onSelectSession, onRename }: PreviewPan
       <VirtualMessageList
         messages={filteredMessages}
         scrollRef={scrollRef}
+        sessionId={detail?.summary.session_id}
+        sessionTitle={detail?.summary.title}
       />
 
       {/* Related sessions */}
