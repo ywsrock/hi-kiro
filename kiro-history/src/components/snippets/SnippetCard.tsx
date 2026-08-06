@@ -219,8 +219,17 @@ export function SnippetCard({ snippet: s, view, isSelected, onSelect, onChange }
   const loadSimilar = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (similar.length > 0) { setShowSimilar(!showSimilar); return; }
-    const res = await api.findSimilarSnippets(s.code, s.language, s.id);
-    setSimilar(res); setShowSimilar(true);
+    try {
+      const res = await api.findSimilarSnippets(s.code, s.language, s.id);
+      setSimilar(res);
+      if (res.length === 0) {
+        toast.success("類似スニペットは見つかりませんでした");
+      } else {
+        setShowSimilar(true);
+      }
+    } catch (err) {
+      toast.error("類似検索に失敗しました: " + String(err));
+    }
   };
 
   if (view === "list") {

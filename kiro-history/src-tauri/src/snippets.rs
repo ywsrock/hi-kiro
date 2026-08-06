@@ -229,7 +229,7 @@ pub fn find_similar_snippets(
         .filter(|s| exclude_id.is_none_or(|id| s.id != id))
         .filter_map(|s| {
             let sim = jaccard_similarity(&code_norm, &normalize_code(&s.code));
-            if sim > 0.4 {
+            if sim > 0.2 {
                 Some(SimilarSnippet {
                     snippet: s,
                     similarity: sim,
