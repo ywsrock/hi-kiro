@@ -184,8 +184,8 @@ export const api = {
 
   // ── Config / WSL Path Detection ─────────────────────────────────────────────
   getConfig: () =>
-    invoke<{ sessions_dir?: string; sqlite_db_path?: string; theme?: string; palette_shortcut_key?: string; palette_shortcut_enabled?: boolean }>("get_config"),
-  saveConfig: (config: { sessions_dir?: string; sqlite_db_path?: string; theme?: string; palette_shortcut_key?: string; palette_shortcut_enabled?: boolean }) =>
+    invoke<{ sessions_dir?: string; sqlite_db_path?: string; theme?: string }>("get_config"),
+  saveConfig: (config: { sessions_dir?: string; sqlite_db_path?: string; theme?: string }) =>
     invoke<void>("save_config_cmd", { config }),
   detectWslPaths: () =>
     invoke<{ sessions_dir?: string; sqlite_db_path?: string; distro?: string }>("detect_wsl_paths"),
