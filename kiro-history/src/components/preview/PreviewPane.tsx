@@ -126,13 +126,11 @@ function CopyDropdown({ content }: { content: string }) {
 function VirtualMessageList({
   messages,
   scrollRef,
-  sessionId,
-  sessionTitle,
+  onSaveSnippet,
 }: {
   messages: Array<{ role: string; content: string }>;
   scrollRef: React.RefObject<HTMLDivElement | null>;
-  sessionId?: string;
-  sessionTitle?: string;
+  onSaveSnippet?: (code: string) => void;
 }) {
   const virtualizer = useVirtualizer({
     count: messages.length,
@@ -178,7 +176,7 @@ function VirtualMessageList({
                   transform: `translateY(${item.start}px)`,
                 }}
               >
-                <MessageBubble role={msg.role as "User" | "Kiro"} content={msg.content} sessionId={sessionId} sessionTitle={sessionTitle} />
+                <MessageBubble role={msg.role as "User" | "Kiro"} content={msg.content} onSaveSnippet={onSaveSnippet} />
               </div>
             );
           })}
@@ -189,17 +187,15 @@ function VirtualMessageList({
 }
 
 function MessageBubble({
-  role, content, sessionId, sessionTitle
+  role, content, onSaveSnippet,
 }: {
   role: "User" | "Kiro";
   content: string;
-  sessionId?: string;
-  sessionTitle?: string;
+  onSaveSnippet?: (code: string) => void;
 }) {
   const [showCopy, setShowCopy] = useState(false);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [saveModal, setSaveModal] = useState<{ code: string; language: string } | null>(null);
   // IntersectionObserver による遅延ハイライト
   // ビューポートに入ってから初めてrehypeHighlightを有効化
   const [visible, setVisible] = useState(false);
@@ -291,10 +287,7 @@ function MessageBubble({
                       onClick={() => {
                         setOpen(false);
                         // メッセージ全文をそのままスニペットとして保存（Copy と同じ範囲）
-                        setSaveModal({
-                          code: content,
-                          language: "markdown",
-                        });
+                        onSaveSnippet?.(content);
                       }}
                       className="w-full text-left px-3 py-1.5 text-xs cursor-pointer flex items-center gap-2"
                       style={{ color: "var(--accent)" }}
@@ -345,17 +338,6 @@ function MessageBubble({
           </div>
         )}
       </div>
-      {/* スニペット保存モーダル */}
-      {saveModal && (
-        <SaveSnippetModal
-          code={saveModal.code}
-          language={saveModal.language}
-          sessionId={sessionId}
-          sessionTitle={sessionTitle}
-          onClose={() => setSaveModal(null)}
-          onSaved={() => setSaveModal(null)}
-        />
-      )}
     </div>
   );
 }
@@ -552,6 +534,8 @@ export function PreviewPane({ sessionId, onSelectSession, onRename }: PreviewPan
   const [showRelated, setShowRelated] = useState(false);
   const [viewMode, setViewMode] = useState<"all" | "user" | "kiro">("all");
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // スニペット保存モーダル（仮想化リスト外で管理して再マウント問題を回避）
+  const [snippetToSave, setSnippetToSave] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) {
@@ -694,8 +678,7 @@ export function PreviewPane({ sessionId, onSelectSession, onRename }: PreviewPan
       <VirtualMessageList
         messages={filteredMessages}
         scrollRef={scrollRef}
-        sessionId={detail?.summary.session_id}
-        sessionTitle={detail?.summary.title}
+        onSaveSnippet={(code) => setSnippetToSave(code)}
       />
 
       {/* Related sessions */}
@@ -777,6 +760,18 @@ export function PreviewPane({ sessionId, onSelectSession, onRename }: PreviewPan
           <CopyDropdown content={fullText} />
         </div>
       </div>
+
+      {/* スニペット保存モーダル（仮想化リスト外でマウント） */}
+      {snippetToSave !== null && (
+        <SaveSnippetModal
+          code={snippetToSave}
+          language="markdown"
+          sessionId={detail?.summary.session_id}
+          sessionTitle={detail?.summary.title}
+          onClose={() => setSnippetToSave(null)}
+          onSaved={() => setSnippetToSave(null)}
+        />
+      )}
     </div>
   );
 }
