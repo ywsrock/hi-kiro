@@ -93,10 +93,40 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export function DashboardView() {
   const [stats, setStats] = useState<StatsData | null>(null);
+  const [calendarView, setCalendarView] = useState<"day" | "week" | "month">("day");
 
   useEffect(() => {
     api.getStats().then(setStats).catch(console.error);
   }, []);
+
+  // 週次集計（月曜始まり）— stats が null のときは空配列
+  const weeklyData = useMemo(() => {
+    if (!stats) return [];
+    const map = new Map<string, number>();
+    for (const d of stats.sessions_by_date) {
+      const date = new Date(d.date + "T00:00:00");
+      const monday = new Date(date);
+      monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+      const key = monday.toISOString().slice(0, 10);
+      map.set(key, (map.get(key) ?? 0) + d.count);
+    }
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([week, count]) => ({ week, count }));
+  }, [stats]);
+
+  // 月次集計
+  const monthlyData = useMemo(() => {
+    if (!stats) return [];
+    const map = new Map<string, number>();
+    for (const d of stats.sessions_by_date) {
+      const key = d.date.slice(0, 7);
+      map.set(key, (map.get(key) ?? 0) + d.count);
+    }
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, count]) => ({ month, count }));
+  }, [stats]);
 
   if (!stats) {
     return (
@@ -114,36 +144,6 @@ export function DashboardView() {
   startDate.setFullYear(startDate.getFullYear() - 1);
 
   const heatmapValues = stats.sessions_by_date.map((d) => ({ date: d.date, count: d.count }));
-
-  // 活動カレンダー ビュー切り替え
-  const [calendarView, setCalendarView] = useState<"day" | "week" | "month">("day");
-
-  // 週次集計（月曜始まり）
-  const weeklyData = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const d of stats.sessions_by_date) {
-      const date = new Date(d.date + "T00:00:00");
-      const monday = new Date(date);
-      monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-      const key = monday.toISOString().slice(0, 10);
-      map.set(key, (map.get(key) ?? 0) + d.count);
-    }
-    return [...map.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([week, count]) => ({ week, count }));
-  }, [stats.sessions_by_date]);
-
-  // 月次集計
-  const monthlyData = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const d of stats.sessions_by_date) {
-      const key = d.date.slice(0, 7);
-      map.set(key, (map.get(key) ?? 0) + d.count);
-    }
-    return [...map.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, count]) => ({ month, count }));
-  }, [stats.sessions_by_date]);
 
   // Fill weekday data (ensure all 7 days shown)
   const weekdayData = WEEKDAY_LABELS.map((label, i) => ({
