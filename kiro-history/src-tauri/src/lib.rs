@@ -165,51 +165,6 @@ pub fn run() {
                 let _ = app_handle.emit("index:done", ());
             });
 
-            // ── グローバルショートカット ──────────────────────────────────
-            use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-            let app_handle2 = app.handle().clone();
-            app.handle()
-                .plugin(
-                    tauri_plugin_global_shortcut::Builder::new()
-                        .with_handler(move |_app, _sc, event| {
-                            if event.state() == ShortcutState::Pressed {
-                                if let Some(win) = app_handle2.get_webview_window("quick-palette") {
-                                    if win.is_visible().unwrap_or(false) {
-                                        let _ = win.hide();
-                                    } else {
-                                        let _ = win.center();
-                                        let _ = win.show();
-                                        let _ = win.set_focus();
-                                    }
-                                }
-                            }
-                        })
-                        .build(),
-                )
-                .ok();
-            // 設定に基づいてショートカットを登録
-            {
-                let cfg = state::load_config();
-                let enabled = cfg.palette_shortcut_enabled.unwrap_or(true);
-                let key = cfg
-                    .palette_shortcut_key
-                    .unwrap_or_else(|| "CommandOrControl+Shift+V".to_string());
-                if enabled {
-                    match key.parse::<Shortcut>() {
-                        Ok(sc) => {
-                            if let Err(e) = app.global_shortcut().register(sc) {
-                                eprintln!("[shortcut] register failed: {e}");
-                            } else {
-                                eprintln!("[shortcut] registered: {key}");
-                            }
-                        }
-                        Err(e) => eprintln!("[shortcut] parse failed '{key}': {e}"),
-                    }
-                } else {
-                    eprintln!("[shortcut] disabled by config");
-                }
-            }
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -275,7 +230,6 @@ pub fn run() {
             commands::set_snippet_collection,
             commands::search_sessions_cursor,
             commands::quick_search_snippets,
-            commands::update_palette_shortcut,
             commands::find_duplicate_groups,
             commands::find_unused_snippets,
             commands::bulk_delete_snippets,

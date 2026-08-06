@@ -240,8 +240,6 @@ export const api = {
   confirmDelete: (message: string) => confirm(message, { title: "削除の確認", kind: "warning" }),
 
   // ── Quick Palette & Cleanup ─────────────────────────────────────────────────
-  updatePaletteShortcut: (enabled: boolean, key: string) =>
-    invoke<void>("update_palette_shortcut", { enabled, key }),
   quickSearchSnippets: (query: string) =>
     invoke<SavedSnippet[]>("quick_search_snippets", { query }),
   findDuplicateGroups: (threshold?: number) =>

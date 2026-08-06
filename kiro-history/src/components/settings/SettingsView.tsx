@@ -28,9 +28,6 @@ export function SettingsView() {
   const [modelPrices, setModelPrices] = useState<Array<{ pattern: string; input: number; output: number; ctx: number }>>([]);
   const [pricesUpdated, setPricesUpdated] = useState("");
   const [isWindows, setIsWindows] = useState(false);
-  const [paletteEnabled, setPaletteEnabled] = useState(true);
-  const [paletteKey, setPaletteKey] = useState("CommandOrControl+Shift+V");
-  const [shortcutSaving, setShortcutSaving] = useState(false);
 
   useEffect(() => {
     // OS判定
@@ -48,8 +45,6 @@ export function SettingsView() {
       .then(([cfg, paths, s]) => {
         setSessionsDir(cfg.sessions_dir ?? "");
         setSqlitePath(cfg.sqlite_db_path ?? "");
-        setPaletteEnabled(cfg.palette_shortcut_enabled ?? true);
-        setPaletteKey(cfg.palette_shortcut_key ?? "CommandOrControl+Shift+V");
         setCurrentPaths(paths);
         setStats(s);
       })
@@ -431,70 +426,6 @@ export function SettingsView() {
           アプリケーションを終了
         </button>
 
-        {/* ── クイックパレット設定 ───────────────────────────── */}
-        <div className="space-y-3" style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            クイックパレット
-          </h3>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            スニペット検索パレットのショートカットキーを設定します。<br />
-            Mac では Command、Windows/Linux では Ctrl が「CommandOrControl」に対応します。
-          </p>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={paletteEnabled}
-              onChange={(e) => setPaletteEnabled(e.target.checked)}
-              style={{ accentColor: "var(--accent)", width: 15, height: 15 }}
-            />
-            <span className="text-sm" style={{ color: "var(--text-primary)" }}>ショートカットを有効にする</span>
-          </label>
-          {paletteEnabled && (
-            <div className="flex items-end gap-3">
-              <div className="flex-1">
-                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>キー</label>
-                <input
-                  value={paletteKey}
-                  onChange={(e) => setPaletteKey(e.target.value)}
-                  placeholder="CommandOrControl+Shift+V"
-                  className="w-full px-3 py-2 text-sm rounded-lg outline-none"
-                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "monospace" }}
-                />
-                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>例: CommandOrControl+Shift+V / Alt+Space</p>
-              </div>
-              <button
-                onClick={async () => {
-                  setShortcutSaving(true);
-                  try {
-                    await api.updatePaletteShortcut(paletteEnabled, paletteKey);
-                    toast.success("ショートカットを更新しました");
-                  } catch (e) { toast.error(`設定失敗: ${e}`); }
-                  finally { setShortcutSaving(false); }
-                }}
-                disabled={shortcutSaving}
-                className="text-sm px-4 py-2 rounded-lg cursor-pointer font-medium"
-                style={{ background: "var(--accent)", color: "#000", opacity: shortcutSaving ? 0.6 : 1 }}
-              >
-                {shortcutSaving ? "適用中..." : "適用"}
-              </button>
-            </div>
-          )}
-          {!paletteEnabled && (
-            <button
-              onClick={async () => {
-                setShortcutSaving(true);
-                try { await api.updatePaletteShortcut(false, paletteKey); toast.success("無効化しました"); }
-                catch (e) { toast.error(`設定失敗: ${e}`); }
-                finally { setShortcutSaving(false); }
-              }}
-              disabled={shortcutSaving}
-              className="text-sm px-4 py-2 rounded-lg cursor-pointer"
-              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
-            >
-              {shortcutSaving ? "保存中..." : "無効化を保存"}
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );
