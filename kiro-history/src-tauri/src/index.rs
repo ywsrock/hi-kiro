@@ -365,7 +365,7 @@ pub fn upsert_session_with_text_and_count(
         .ok();
 
     if let Some(existing_updated) = existing {
-        if existing_updated >= session.updated_at && session.updated_at > 0 {
+        if existing_updated > session.updated_at && session.updated_at > 0 {
             return Ok(());
         }
         conn.execute(
@@ -420,7 +420,7 @@ fn upsert_session(conn: &Connection, session: &Session) -> Result<()> {
         .ok();
 
     if let Some(existing_updated) = existing {
-        if existing_updated >= session.updated_at && session.updated_at > 0 {
+        if existing_updated > session.updated_at && session.updated_at > 0 {
             return Ok(()); // Skip: no changes
         }
         // Delete old FTS entry
