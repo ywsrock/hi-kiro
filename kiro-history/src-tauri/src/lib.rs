@@ -87,16 +87,30 @@ pub fn run() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
-                        let app = tray.app_handle();
-                        if let Some(w) = app.get_webview_window("main") {
-                            if w.is_visible().unwrap_or(false) {
-                                let _ = w.hide();
-                            } else {
-                                let _ = w.show();
-                                let _ = w.set_focus();
+                    let app = tray.app_handle();
+                    match event {
+                        // シングルクリック: 非表示の時だけ表示する（表示中は何もしない）
+                        // ダブルクリック時に Click が2回来てチラつく問題を回避
+                        tauri::tray::TrayIconEvent::Click { .. } => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                if !w.is_visible().unwrap_or(true) {
+                                    let _ = w.show();
+                                    let _ = w.set_focus();
+                                }
                             }
                         }
+                        // ダブルクリック: 表示/非表示をトグル
+                        tauri::tray::TrayIconEvent::DoubleClick { .. } => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                if w.is_visible().unwrap_or(false) {
+                                    let _ = w.hide();
+                                } else {
+                                    let _ = w.show();
+                                    let _ = w.set_focus();
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 })
                 .build(app)?;
