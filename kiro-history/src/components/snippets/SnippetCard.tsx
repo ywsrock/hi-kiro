@@ -181,7 +181,7 @@ interface SnippetCardProps {
 }
 export function SnippetCard({ snippet: s, view, isSelected, onSelect, onChange }: SnippetCardProps) {
   const toast = useToast();
-  const { setSelectedSessionId, setActiveView } = useApp();
+  const { navigateToSession } = useApp();
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(s.title);
@@ -304,7 +304,7 @@ export function SnippetCard({ snippet: s, view, isSelected, onSelect, onChange }
         <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
           {s.use_count > 0 && <span>{s.use_count}回</span>}
           {s.source_session_id && (
-            <button onClick={(e) => { e.stopPropagation(); setSelectedSessionId(s.source_session_id!); setActiveView("search"); }}
+            <button onClick={(e) => { e.stopPropagation(); navigateToSession(s.source_session_id!); }}
               className="flex items-center gap-0.5 cursor-pointer hover:underline" style={{ color: "var(--text-muted)" }}>
               <ExternalLink size={10} /> ソース
             </button>

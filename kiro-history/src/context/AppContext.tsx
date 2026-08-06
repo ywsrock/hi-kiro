@@ -7,6 +7,7 @@ interface AppContextValue {
   setActiveView: (v: View) => void;
   selectedSessionId: string | null;
   setSelectedSessionId: (id: string | null) => void;
+  navigateToSession: (sessionId: string, view?: View) => void;
   diffSessionIds: [string, string] | null;
   setDiffSessionIds: (ids: [string, string] | null) => void;
   indexing: boolean;
@@ -20,6 +21,7 @@ const AppContext = createContext<AppContextValue>({
   setActiveView: () => {},
   selectedSessionId: null,
   setSelectedSessionId: () => {},
+  navigateToSession: () => {},
   diffSessionIds: null,
   setDiffSessionIds: () => {},
   indexing: false,
@@ -51,11 +53,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setActiveViewRaw(v);
   }, []);
 
+  // 指定ビューで指定セッションを開くヘルパー
+  const navigateToSession = useCallback((sessionId: string, view: View = "search") => {
+    setSelectedByView((prev) => ({ ...prev, [view]: sessionId }));
+    setActiveViewRaw(view);
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
         activeView, setActiveView,
-        selectedSessionId, setSelectedSessionId,
+        selectedSessionId, setSelectedSessionId, navigateToSession,
         diffSessionIds, setDiffSessionIds,
         indexing, setIndexing,
         indexProgress, setIndexProgress,

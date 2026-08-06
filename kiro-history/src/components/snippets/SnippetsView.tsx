@@ -3,6 +3,7 @@ import { Search, LayoutGrid, List, Star, Plus, BarChart2, X, Copy, Check, Downlo
 import { api } from "../../api";
 import type { ExportItem, SnippetCollection } from "../../api";
 import { useToast } from "../ui/Toast";
+import { useApp } from "../../context/AppContext";
 import { SnippetCard, SaveSnippetModal, langColor, LANG_COLORS } from "./SnippetCard";
 import { SnippetDetailPanel } from "./SnippetDetailPanel";
 import type { SavedSnippet, CodeSnippetWithSession, SnippetStats } from "../../types";
@@ -20,6 +21,7 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export function SnippetsView() {
+  const { navigateToSession } = useApp();
   const toast = useToast();
   const searchRef = useRef<HTMLInputElement>(null);
 
