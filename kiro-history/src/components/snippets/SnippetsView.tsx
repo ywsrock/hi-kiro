@@ -434,10 +434,21 @@ export function SnippetsView() {
               <div className="flex flex-col items-center justify-center gap-3 py-16">
                 <p className="text-sm" style={{ color: "var(--text-muted)" }}>スニペットが見つかりません</p>
               </div>
+            ) : view === "list" ? (
+              /* リストビュー: 仮想化で大量件数に対応（IPC 同時発火を抑制） */
+              <VirtualizedSnippetList
+                snippets={allSnippets}
+                parentRef={allSnippetsParentRef}
+                selectedId={selectedId}
+                onSelect={(i) => setSelectedId(selectedId === `all-${i}` ? null : `all-${i}`)}
+                onSave={(s) => setSaveModal(s)}
+                onPreview={(s) => setDetailSnippet(s)}
+              />
             ) : (
-              <div className={view === "grid" ? "grid gap-4" : "space-y-0"} style={view === "grid" ? { gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" } : {}}>
+              /* グリッドビュー: 検索で件数が絞られる前提でそのまま（将来対応可） */
+              <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
                 {allSnippets.map((s, i) => (
-                  <SessionSnippetCard key={i} snippet={s} view={view}
+                  <SessionSnippetCard key={i} snippet={s} view="grid"
                     isSelected={selectedId === `all-${i}`}
                     onSelect={() => { setSelectedId(selectedId === `all-${i}` ? null : `all-${i}`); }}
                     onSave={() => setSaveModal(s)}
