@@ -42,6 +42,25 @@ pub struct AppState {
     pub sqlite_tmp_cache: Option<(PathBuf, std::time::SystemTime)>,
     /// モデル価格設定キャッシュ（再読み込みで更新可能）
     pub model_prices: RwLock<crate::model_prices::ModelPricesConfig>,
+    /// 全セッションスニペットキャッシュ（mtimeベース、タブ切り替え高速化）
+    pub snippets_cache: std::sync::RwLock<SnippetsScanCache>,
+}
+
+/// `get_all_snippets` 用の JSONL 全件スキャン結果キャッシュ
+pub struct SnippetsScanCache {
+    /// sessions_dir の最終更新時刻（変化したら再スキャン）
+    pub dir_mtime: Option<std::time::SystemTime>,
+    /// キャッシュしたセッション一覧（メッセージ本文込み）
+    pub sessions: Vec<Arc<crate::models::Session>>,
+}
+
+impl SnippetsScanCache {
+    pub fn new() -> Self {
+        SnippetsScanCache {
+            dir_mtime: None,
+            sessions: Vec::new(),
+        }
+    }
 }
 
 impl AppState {
@@ -61,6 +80,7 @@ impl AppState {
             session_cache: LruCache::new(NonZeroUsize::new(SESSION_CACHE_CAPACITY).unwrap()),
             sqlite_tmp_cache: None,
             model_prices: RwLock::new(crate::model_prices::load()),
+            snippets_cache: std::sync::RwLock::new(SnippetsScanCache::new()),
         }
     }
 }

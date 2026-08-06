@@ -421,6 +421,7 @@ fn extract_assistant_text_full(assistant: &Value) -> Option<String> {
 }
 
 /// Legacy: full load (kept for compatibility with existing tests)
+#[allow(dead_code)]
 pub fn parse_all(db_path: &Path) -> Vec<Session> {
     let mut sessions = Vec::new();
     stream_all(db_path, |meta| {

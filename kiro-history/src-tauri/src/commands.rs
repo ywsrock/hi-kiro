@@ -589,21 +589,63 @@ pub fn get_all_snippets(
 ) -> Result<Vec<CodeSnippetWithSession>, String> {
     let state_guard = state.lock().map_err(|e| e.to_string())?;
     let sessions_dir = state_guard.sessions_dir.clone();
-    let sqlite_db_path = state_guard.sqlite_db_path.clone();
+    // SQLite 側は parse_all が messages:vec![] で返すため extract_snippets が常にゼロ件。
+    // SQLite セッションのスニペット対応は将来 session_snippets テーブルで行う。
+    // let sqlite_db_path = state_guard.sqlite_db_path.clone();  // fix: 空振り削除
+
+    let q = query.unwrap_or_default();
+    let lang = lang_filter;
+
+    // ── mtimeベースキャッシュでJSONL全件再スキャンを回避 ─────────────────────────
+    // sessions_dir の mtime を取得（ファイル追加・更新の検出）
+    let current_mtime = std::fs::metadata(&sessions_dir)
+        .and_then(|m| m.modified())
+        .ok();
+
+    // キャッシュが有効か確認（読み取りロック）
+    let cached_sessions: Option<Vec<std::sync::Arc<crate::models::Session>>> = {
+        let cache = state_guard
+            .snippets_cache
+            .read()
+            .map_err(|e| e.to_string())?;
+        if cache.dir_mtime.is_some() && cache.dir_mtime == current_mtime {
+            Some(cache.sessions.clone())
+        } else {
+            None
+        }
+    };
+
+    let sessions = if let Some(sessions) = cached_sessions {
+        // キャッシュヒット：ディスクスキャンをスキップ
+        sessions
+    } else {
+        // キャッシュミス：全件スキャンしてキャッシュを更新
+        let fresh: Vec<std::sync::Arc<crate::models::Session>> = jsonl::parse_all(&sessions_dir)
+            .into_iter()
+            .map(std::sync::Arc::new)
+            .collect();
+
+        {
+            let mut cache = state_guard
+                .snippets_cache
+                .write()
+                .map_err(|e| e.to_string())?;
+            cache.dir_mtime = current_mtime;
+            cache.sessions = fresh.clone();
+        }
+        fresh
+    };
+
     drop(state_guard);
 
-    let mut all: Vec<CodeSnippetWithSession> = Vec::new();
-    let q = query.as_deref().unwrap_or("");
-    let lang = lang_filter.as_deref();
+    // フィルタ適用（q/lang）
+    let q_str = q.as_str();
+    let lang_ref = lang.as_deref();
+    let all: Vec<CodeSnippetWithSession> = sessions
+        .iter()
+        .flat_map(|s| operations::extract_snippets_with_session(s, q_str, lang_ref))
+        .collect();
 
-    for session in jsonl::parse_all(&sessions_dir) {
-        all.extend(operations::extract_snippets_with_session(&session, q, lang));
-    }
-    if sqlite_db_path.exists() {
-        for session in sqlite_source::parse_all(&sqlite_db_path) {
-            all.extend(operations::extract_snippets_with_session(&session, q, lang));
-        }
-    }
     Ok(all)
 }
 
