@@ -287,42 +287,159 @@ pub fn suggest_snippet_title(language: &str, code: &str) -> String {
         return format!("{} snippet", language);
     }
 
-    let first = lines[0].trim();
+    // Priority 1: comment / docstring
+    for &line in lines.iter().take(15) {
+        let t = line.trim();
 
+        // Python docstring
+        if (t.starts_with("\"\"\"") || t.starts_with("'''")) && t.len() > 6 {
+            let inner = t
+                .trim_start_matches("\"\"\"")
+                .trim_start_matches("'''")
+                .trim_end_matches("\"\"\"")
+                .trim_end_matches("'''")
+                .trim();
+            if is_descriptive(inner) {
+                return truncate_title(inner, 70);
+            }
+        }
+        // Rust/TS/JS doc comments
+        if t.starts_with("///") {
+            let inner = t.trim_start_matches("///").trim();
+            if is_descriptive(inner) {
+                return truncate_title(inner, 70);
+            }
+        }
+        if t.starts_with("/**") || t.starts_with("/*!") {
+            let inner = t
+                .trim_start_matches("/**")
+                .trim_start_matches("/*!")
+                .trim_end_matches("*/")
+                .trim_start_matches('*')
+                .trim();
+            if is_descriptive(inner) {
+                return truncate_title(inner, 70);
+            }
+        }
+        if t.starts_with("/*") && t.ends_with("*/") {
+            let inner = t.trim_start_matches("/*").trim_end_matches("*/").trim();
+            if is_descriptive(inner) {
+                return truncate_title(inner, 70);
+            }
+        }
+        // Line comments: #  //  --
+        let comment_text = t
+            .strip_prefix("# ")
+            .or_else(|| t.strip_prefix("// "))
+            .or_else(|| t.strip_prefix("-- "))
+            .map(str::trim);
+        if let Some(inner) = comment_text {
+            if is_descriptive(inner) {
+                return truncate_title(inner, 70);
+            }
+        }
+    }
+
+    // Priority 2: decorator context + function name
+    let mut decorator_context: Option<String> = None;
+    for (i, &line) in lines.iter().enumerate() {
+        let t = line.trim();
+        if t.starts_with('@') {
+            let ctx = if t.contains("route")
+                || t.contains("get")
+                || t.contains("post")
+                || t.contains("put")
+                || t.contains("delete")
+                || t.contains("patch")
+            {
+                Some("endpoint")
+            } else if t.contains("test") {
+                Some("test")
+            } else if t.contains("property") {
+                Some("property")
+            } else if t.contains("cache") || t.contains("memo") {
+                Some("cached")
+            } else {
+                None
+            };
+            if let Some(ctx) = ctx {
+                if let Some(&next_line) = lines.get(i + 1) {
+                    if let Some(name) = extract_fn_name_new(
+                        next_line.trim(),
+                        &[
+                            "def ",
+                            "async def ",
+                            "fn ",
+                            "pub fn ",
+                            "pub async fn ",
+                            "function ",
+                            "async function ",
+                            "const ",
+                            "export function ",
+                        ],
+                    ) {
+                        let human = fn_name_to_human(&name);
+                        decorator_context = Some(format!("{} ({})", human, ctx));
+                    }
+                }
+            }
+        }
+    }
+    if let Some(ctx) = decorator_context {
+        return ctx;
+    }
+
+    // Priority 3: function / class name -> human label
+    let first = lines[0].trim();
     match language {
         "typescript" | "javascript" => {
-            if let Some(name) = extract_fn_name(
+            if let Some(name) = extract_fn_name_new(
                 first,
                 &[
-                    "function ",
-                    "const ",
                     "async function ",
+                    "export async function ",
+                    "export default async function ",
                     "export function ",
+                    "export default function ",
+                    "function ",
                     "export const ",
+                    "export default const ",
+                    "const ",
+                    "export class ",
                     "class ",
                 ],
             ) {
-                return format!("{} - {}", lang_label(language), name);
+                return format!("{} - {}", lang_label(language), fn_name_to_human(&name));
             }
         }
         "python" => {
-            if let Some(name) = extract_fn_name(first, &["def ", "class ", "async def "]) {
-                return format!("Python - {}", name);
+            if let Some(name) = extract_fn_name_new(first, &["async def ", "def ", "class "]) {
+                return format!("Python - {}", fn_name_to_human(&name));
             }
         }
         "rust" => {
-            if let Some(name) = extract_fn_name(
+            if let Some(name) = extract_fn_name_new(
                 first,
                 &[
-                    "fn ",
-                    "pub fn ",
                     "pub async fn ",
+                    "pub fn ",
+                    "async fn ",
+                    "fn ",
+                    "pub struct ",
                     "struct ",
+                    "pub enum ",
                     "enum ",
                     "impl ",
+                    "pub trait ",
+                    "trait ",
                 ],
             ) {
-                return format!("Rust - {}", name);
+                return format!("Rust - {}", fn_name_to_human(&name));
+            }
+        }
+        "go" => {
+            if let Some(name) = extract_fn_name_new(first, &["func (", "func "]) {
+                return format!("Go - {}", fn_name_to_human(&name));
             }
         }
         "sql" => {
@@ -330,11 +447,12 @@ pub fn suggest_snippet_title(language: &str, code: &str) -> String {
             for kw in &[
                 "CREATE TABLE",
                 "CREATE INDEX",
+                "CREATE VIEW",
                 "SELECT",
-                "INSERT",
+                "INSERT INTO",
                 "UPDATE",
-                "DELETE",
-                "ALTER",
+                "DELETE FROM",
+                "ALTER TABLE",
             ] {
                 if upper.starts_with(kw) {
                     let table = extract_sql_target(first);
@@ -343,7 +461,6 @@ pub fn suggest_snippet_title(language: &str, code: &str) -> String {
             }
         }
         "yaml" | "json" => {
-            // Extract top-level key as context
             if let Some(key) = first.split(':').next() {
                 let key = key.trim().trim_matches('"').trim_matches('\'');
                 if !key.is_empty() && key.len() < 30 {
@@ -354,8 +471,8 @@ pub fn suggest_snippet_title(language: &str, code: &str) -> String {
         "bash" | "shell" => {
             if first.starts_with('#') {
                 let comment = first.trim_start_matches('#').trim();
-                if !comment.is_empty() && comment.len() < 60 {
-                    return comment.to_string();
+                if is_descriptive(comment) {
+                    return truncate_title(comment, 70);
                 }
             }
             if let Some(cmd) = first.split_whitespace().next() {
@@ -365,72 +482,123 @@ pub fn suggest_snippet_title(language: &str, code: &str) -> String {
         _ => {}
     }
 
-    // 言語マッチ失敗時: コードらしい行を探して意味あるタイトルを生成
-    // 指示文（自然言語）を除外してコードの特徴的な行を優先する
-    let code_line = lines.iter().find(|line| {
+    // Priority 4: fallback
+    let code_line = lines.iter().find(|&&line| {
         let t = line.trim();
-        // 指示文パターンを除外
-        let is_instruction = t.ends_with('：')
-            || t.ends_with(':')
-            || t.ends_with("して")
-            || t.ends_with("する")
-            || t.ends_with("せよ")
-            || t.ends_with("ください")
-            || t.ends_with("通訳")
-            || t.ends_with("翻訳")
-            || t.ends_with("変換")
-            || t.ends_with("説明")
-            || (t
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == ' ' || c == '.' || c == ',' || c == '?')
-                && !t.contains('{')
-                && !t.contains('(')
-                && !t.contains('='));
-        // コードらしい特徴: 記号・括弧・演算子を含む
-        let has_code_chars = t.contains('(')
-            || t.contains('{')
-            || t.contains('=')
-            || t.contains(';')
-            || t.starts_with('#')
-            || t.starts_with("//")
-            || t.starts_with("def ")
-            || t.starts_with("fn ")
-            || t.starts_with("function ")
-            || t.starts_with("class ")
-            || t.starts_with("import ")
-            || t.starts_with("from ")
-            || t.starts_with("use ")
-            || t.starts_with("var ")
-            || t.starts_with("let ")
-            || t.starts_with("const ");
-        !is_instruction && (has_code_chars || t.len() > 5)
+        !is_instruction_text(t) && has_code_characteristics(t)
     });
 
-    let best_line = code_line.unwrap_or(&first);
-    let truncated: String = best_line.trim().chars().take(50).collect();
-    if truncated.len() < best_line.trim().len() {
-        format!("{}…", truncated)
-    } else if truncated.is_empty() {
+    let best_line = code_line.unwrap_or(&lines[0]);
+    let raw = best_line.trim();
+    let chars: Vec<char> = raw.chars().collect();
+    if chars.is_empty() {
         format!("{} snippet", language)
+    } else if chars.len() <= 60 {
+        raw.to_string()
     } else {
-        truncated
+        chars[..60].iter().collect::<String>() + "..."
     }
 }
 
-fn lang_label(lang: &str) -> &str {
-    match lang {
-        "typescript" => "TypeScript",
-        "javascript" => "JavaScript",
-        _ => lang,
+/// Comment/docstring is descriptive
+fn is_descriptive(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() || t.len() < 4 || t.len() > 120 {
+        return false;
+    }
+    let symbol_ratio = t
+        .chars()
+        .filter(|c| !c.is_alphanumeric() && !c.is_whitespace())
+        .count() as f32
+        / t.len() as f32;
+    if symbol_ratio > 0.5 {
+        return false;
+    }
+    !t.starts_with("http") && !t.starts_with("www.")
+}
+
+/// Truncate to max chars
+fn truncate_title(text: &str, max: usize) -> String {
+    let t = text.trim();
+    let chars: Vec<char> = t.chars().collect();
+    if chars.len() <= max {
+        t.to_string()
+    } else {
+        chars[..max].iter().collect::<String>() + "..."
     }
 }
 
-fn extract_fn_name(line: &str, prefixes: &[&str]) -> Option<String> {
+/// Convert snake_case / camelCase name to human-readable
+fn fn_name_to_human(name: &str) -> String {
+    let name = name.split('(').next().unwrap_or(name).trim();
+    let name = if name.contains(')') {
+        name.split(')').nth(1).unwrap_or(name).trim()
+    } else {
+        name
+    };
+    let name = name.split('<').next().unwrap_or(name).trim();
+    if name.is_empty() {
+        return String::new();
+    }
+    let spaced = name.replace('_', " ");
+    let mut result = String::new();
+    let mut prev_lower = false;
+    for c in spaced.chars() {
+        if c.is_uppercase() && prev_lower {
+            result.push(' ');
+        }
+        result.push(c);
+        prev_lower = c.is_lowercase();
+    }
+    let mut chars = result.trim().chars();
+    match chars.next() {
+        None => String::new(),
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
+
+/// Detect natural-language instruction text (not code)
+fn is_instruction_text(t: &str) -> bool {
+    t.ends_with(':')
+        || t.ends_with("して")
+        || t.ends_with("する")
+        || t.ends_with("せよ")
+        || t.ends_with("ください")
+        || (t
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == ' ' || c == '.' || c == ',' || c == '?')
+            && !t.contains('{')
+            && !t.contains('(')
+            && !t.contains('='))
+}
+
+/// Has code-like characteristics
+fn has_code_characteristics(t: &str) -> bool {
+    t.contains('(')
+        || t.contains('{')
+        || t.contains('=')
+        || t.contains(';')
+        || t.starts_with('#')
+        || t.starts_with("//")
+        || t.starts_with("def ")
+        || t.starts_with("fn ")
+        || t.starts_with("function ")
+        || t.starts_with("class ")
+        || t.starts_with("import ")
+        || t.starts_with("from ")
+        || t.starts_with("use ")
+        || t.starts_with("var ")
+        || t.starts_with("let ")
+        || t.starts_with("const ")
+}
+
+/// Extract function/class name from line (new version)
+fn extract_fn_name_new(line: &str, prefixes: &[&str]) -> Option<String> {
     for prefix in prefixes {
         if let Some(rest) = line.strip_prefix(prefix) {
             let name: String = rest
                 .chars()
-                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .take_while(|&c| c.is_alphanumeric() || c == '_')
                 .collect();
             if !name.is_empty() {
                 return Some(name);
@@ -438,6 +606,23 @@ fn extract_fn_name(line: &str, prefixes: &[&str]) -> Option<String> {
         }
     }
     None
+}
+
+fn lang_label(lang: &str) -> &str {
+    match lang {
+        "typescript" => "TypeScript",
+        "javascript" => "JavaScript",
+        "python" => "Python",
+        "rust" => "Rust",
+        "go" => "Go",
+        "java" => "Java",
+        "kotlin" => "Kotlin",
+        "sql" => "SQL",
+        "yaml" => "YAML",
+        "json" => "JSON",
+        "bash" | "shell" => "Shell",
+        _ => lang,
+    }
 }
 
 fn extract_sql_target(line: &str) -> String {
@@ -796,4 +981,75 @@ pub fn set_snippet_collection(
         ],
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod title_tests {
+    use super::suggest_snippet_title;
+
+    #[test]
+    fn test_python_docstring() {
+        let code = r#"def parse_config(path):
+    """設定ファイルを読み込んで辞書を返す"""
+    pass"#;
+        let t = suggest_snippet_title("python", code);
+        assert_eq!(t, "設定ファイルを読み込んで辞書を返す", "got: {}", t);
+    }
+
+    #[test]
+    fn test_rust_doc_comment() {
+        let code = r#"/// ユーザー認証トークンを検証する
+pub fn verify_token(token: &str) -> bool {
+    todo!()
+}"#;
+        let t = suggest_snippet_title("rust", code);
+        assert_eq!(t, "ユーザー認証トークンを検証する", "got: {}", t);
+    }
+
+    #[test]
+    fn test_js_line_comment() {
+        let code = r#"// レート制限付きAPIクライアント
+async function fetchWithLimit(url, opts) {
+    return fetch(url, opts);
+}"#;
+        let t = suggest_snippet_title("javascript", code);
+        assert_eq!(t, "レート制限付きAPIクライアント", "got: {}", t);
+    }
+
+    #[test]
+    fn test_fn_name_human_fallback() {
+        let code = "pub async fn create_user_session(conn: &Connection) {}";
+        let t = suggest_snippet_title("rust", code);
+        assert_eq!(t, "Rust - Create user session", "got: {}", t);
+    }
+
+    #[test]
+    fn test_shell_comment() {
+        let code = r#"#!/bin/bash
+# Dockerイメージをビルドしてプッシュするスクリプト
+docker build -t myapp ."#;
+        let t = suggest_snippet_title("bash", code);
+        assert_eq!(
+            t, "Dockerイメージをビルドしてプッシュするスクリプト",
+            "got: {}",
+            t
+        );
+    }
+
+    #[test]
+    fn test_sql_create_table() {
+        let code = "CREATE TABLE user_sessions (id TEXT PRIMARY KEY, user_id TEXT)";
+        let t = suggest_snippet_title("sql", code);
+        assert!(t.contains("user_sessions"), "got: {}", t);
+    }
+
+    #[test]
+    fn test_instruction_text_skipped() {
+        let code = r#"以下のコードを翻訳してください：
+def hello():
+    print("hello")"#;
+        let t = suggest_snippet_title("python", code);
+        // 指示文ではなくコード行が選ばれるはず
+        assert!(!t.contains("以下") && !t.contains("ください"), "got: {}", t);
+    }
 }
