@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis,
   Tooltip, ResponsiveContainer, CartesianGrid, RadarChart,
@@ -114,6 +114,36 @@ export function DashboardView() {
   startDate.setFullYear(startDate.getFullYear() - 1);
 
   const heatmapValues = stats.sessions_by_date.map((d) => ({ date: d.date, count: d.count }));
+
+  // 活動カレンダー ビュー切り替え
+  const [calendarView, setCalendarView] = useState<"day" | "week" | "month">("day");
+
+  // 週次集計（月曜始まり）
+  const weeklyData = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const d of stats.sessions_by_date) {
+      const date = new Date(d.date + "T00:00:00");
+      const monday = new Date(date);
+      monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+      const key = monday.toISOString().slice(0, 10);
+      map.set(key, (map.get(key) ?? 0) + d.count);
+    }
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([week, count]) => ({ week, count }));
+  }, [stats.sessions_by_date]);
+
+  // 月次集計
+  const monthlyData = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const d of stats.sessions_by_date) {
+      const key = d.date.slice(0, 7);
+      map.set(key, (map.get(key) ?? 0) + d.count);
+    }
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, count]) => ({ month, count }));
+  }, [stats.sessions_by_date]);
 
   // Fill weekday data (ensure all 7 days shown)
   const weekdayData = WEEKDAY_LABELS.map((label, i) => ({
@@ -335,43 +365,114 @@ export function DashboardView() {
           </Card>
         </div>
 
-        {/* ── Activity Heatmap ────────────────────────────────────────────── */}
+        {/* ── Activity Calendar ────────────────────────────────────────────── */}
         <Card>
-          <SectionTitle>📊 活動カレンダー（過去12ヶ月）</SectionTitle>
-          <div className="overflow-x-auto">
-            <CalendarHeatmap
-              startDate={startDate}
-              endDate={endDate}
-              values={heatmapValues}
-              classForValue={(value) => {
-                const c = value?.count ?? 0;
-                if (!value || c === 0) return "color-empty";
-                if (c >= 8) return "color-scale-4";
-                if (c >= 5) return "color-scale-3";
-                if (c >= 3) return "color-scale-2";
-                return "color-scale-1";
-              }}
-              titleForValue={(value) =>
-                value ? `${value.date}: ${value.count ?? 0} session(s)` : "No sessions"
-              }
-            />
+          <div className="flex items-center justify-between mb-3">
+            <SectionTitle>📊 活動カレンダー</SectionTitle>
+            {/* 日/週/月 切り替えタブ */}
+            <div className="flex items-center rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+              {(["day", "week", "month"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setCalendarView(v)}
+                  className="px-3 py-1 text-xs cursor-pointer"
+                  style={{
+                    background: calendarView === v ? "var(--accent)" : "transparent",
+                    color: calendarView === v ? "#000" : "var(--text-muted)",
+                    transition: "background 0.15s",
+                  }}
+                >
+                  {v === "day" ? "日" : v === "week" ? "週" : "月"}
+                </button>
+              ))}
+            </div>
           </div>
-          <style>{`
-            .color-empty { fill: var(--border); }
-            .color-scale-1 { fill: #166534; }
-            .color-scale-2 { fill: #15803D; }
-            .color-scale-3 { fill: #16A34A; }
-            .color-scale-4 { fill: #22C55E; }
-            .react-calendar-heatmap text { fill: var(--text-muted); font-size: 9px; }
-            .react-calendar-heatmap rect { rx: 2; }
-          `}</style>
-          <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
-            <span>少</span>
-            {["#166534","#15803D","#16A34A","#22C55E"].map((c) => (
-              <div key={c} className="w-3 h-3 rounded-sm" style={{ background: c }} />
-            ))}
-            <span>多</span>
-          </div>
+
+          {/* 日ビュー: GitHub風ヒートマップ */}
+          {calendarView === "day" && (
+            <>
+              <div className="overflow-x-auto">
+                <CalendarHeatmap
+                  startDate={startDate}
+                  endDate={endDate}
+                  values={heatmapValues}
+                  classForValue={(value) => {
+                    const c = value?.count ?? 0;
+                    if (!value || c === 0) return "color-empty";
+                    if (c >= 8) return "color-scale-4";
+                    if (c >= 5) return "color-scale-3";
+                    if (c >= 3) return "color-scale-2";
+                    return "color-scale-1";
+                  }}
+                  titleForValue={(value) =>
+                    value ? `${value.date}: ${value.count ?? 0} session(s)` : "No sessions"
+                  }
+                />
+              </div>
+              <style>{`
+                .color-empty { fill: var(--border); }
+                .color-scale-1 { fill: #166534; }
+                .color-scale-2 { fill: #15803D; }
+                .color-scale-3 { fill: #16A34A; }
+                .color-scale-4 { fill: #22C55E; }
+                .react-calendar-heatmap text { fill: var(--text-muted); font-size: 9px; }
+                .react-calendar-heatmap rect { rx: 2; }
+              `}</style>
+              <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                <span>少</span>
+                {["#166534","#15803D","#16A34A","#22C55E"].map((c) => (
+                  <div key={c} className="w-3 h-3 rounded-sm" style={{ background: c }} />
+                ))}
+                <span>多</span>
+              </div>
+            </>
+          )}
+
+          {/* 週ビュー: 棒グラフ（recharts） */}
+          {calendarView === "week" && (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={weeklyData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                <XAxis
+                  dataKey="week"
+                  tick={{ fontSize: 10, fill: "var(--text-muted)" }}
+                  tickFormatter={(w: string) => w.slice(5)}
+                />
+                <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", fontSize: 12 }}
+                  formatter={(v: number) => [v, "セッション数"]}
+                  labelFormatter={(w: string) => `週: ${w}`}
+                />
+                <Bar dataKey="count" name="セッション" fill={ACCENT} radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+
+          {/* 月ビュー: 棒グラフ（recharts） */}
+          {calendarView === "month" && (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={monthlyData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: 10, fill: "var(--text-muted)" }}
+                  tickFormatter={(m: string) => {
+                    const [y, mo] = m.split("-");
+                    return `${y.slice(2)}/${mo}`;
+                  }}
+                />
+                <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", fontSize: 12 }}
+                  formatter={(v: number) => [v, "セッション数"]}
+                  labelFormatter={(m: string) => {
+                    const [y, mo] = m.split("-");
+                    return `${y}年${parseInt(mo)}月`;
+                  }}
+                />
+                <Bar dataKey="count" name="セッション" fill={ACCENT} radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </Card>
 
         {/* ── Tags ───────────────────────────────────────────────────────── */}
