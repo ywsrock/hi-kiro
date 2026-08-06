@@ -51,6 +51,7 @@ fn init_schema(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS sessions_meta (
             session_id      TEXT PRIMARY KEY,
             title           TEXT NOT NULL DEFAULT '',
+            custom_title    TEXT,
             cwd             TEXT NOT NULL DEFAULT '',
             created_at      INTEGER NOT NULL DEFAULT 0,
             updated_at      INTEGER NOT NULL DEFAULT 0,
@@ -364,6 +365,16 @@ pub fn upsert_session_with_text_and_count(
         )
         .ok();
 
+    // custom_title（ユーザーが設定したリネーム）を既存 DB から保持する
+    let existing_custom_title: Option<String> = conn
+        .query_row(
+            "SELECT custom_title FROM sessions_meta WHERE session_id = ?1",
+            params![session.id],
+            |row| row.get(0),
+        )
+        .ok()
+        .flatten();
+
     if let Some(existing_updated) = existing {
         if existing_updated > session.updated_at && session.updated_at > 0 {
             return Ok(());
@@ -374,14 +385,21 @@ pub fn upsert_session_with_text_and_count(
         )?;
     }
 
+    // 表示タイトル: custom_title があればそちらを優先
+    let display_title = existing_custom_title
+        .as_deref()
+        .unwrap_or(&session.title)
+        .to_string();
+
     conn.execute(
         "INSERT OR REPLACE INTO sessions_meta
-         (session_id, title, cwd, created_at, updated_at, message_count, source,
+         (session_id, title, custom_title, cwd, created_at, updated_at, message_count, source,
           model_name, max_context_pct, total_tool_uses, total_cycles, total_duration_secs)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
             session.id,
-            session.title,
+            display_title,
+            existing_custom_title,
             session.cwd,
             session.created_at,
             session.updated_at,
@@ -397,7 +415,7 @@ pub fn upsert_session_with_text_and_count(
 
     conn.execute(
         "INSERT INTO sessions_fts (session_id, title, cwd, full_text) VALUES (?1, ?2, ?3, ?4)",
-        params![session.id, session.title, session.cwd, full_text],
+        params![session.id, &display_title, session.cwd, full_text],
     )?;
 
     conn.execute(

@@ -349,9 +349,9 @@ pub fn rename_session(conn: &Connection, session_id: &str, new_title: &str) -> R
     if new_title.is_empty() {
         return Err(anyhow::anyhow!("タイトルを入力してください"));
     }
-    // Update sessions_meta
+    // Update sessions_meta: title と custom_title の両方を更新
     conn.execute(
-        "UPDATE sessions_meta SET title = ?1 WHERE session_id = ?2",
+        "UPDATE sessions_meta SET title = ?1, custom_title = ?1 WHERE session_id = ?2",
         params![new_title, session_id],
     )?;
     // Update FTS index: delete old entry and re-insert with new title
