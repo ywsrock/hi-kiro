@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, LayoutGrid, List, Star, Plus, BarChart2, X, Copy, Check, Download, Upload, Folder, FolderPlus } from "lucide-react";
 import { api } from "../../api";
 import type { ExportItem, SnippetCollection } from "../../api";
@@ -43,6 +44,7 @@ export function SnippetsView() {
   const [saveModal, setSaveModal] = useState<CodeSnippetWithSession | null>(null);
   const [detailSnippet, setDetailSnippet] = useState<import("../../types").SavedSnippet | CodeSnippetWithSession | null>(null);
   const [allSnippetTags, setAllSnippetTags] = useState<Array<[string, number]>>([]);
+  const allSnippetsParentRef = useRef<HTMLDivElement>(null);
   const [collections, setCollections] = useState<SnippetCollection[]>([]);
   const [selectedCollection, setSelectedCollection] = useState<string>("");  // "" = 全件
   const [newCollectionName, setNewCollectionName] = useState("");
@@ -374,7 +376,7 @@ export function SnippetsView() {
       </div>
 
       {/* ── Content ───────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto p-4">
+      <div ref={allSnippetsParentRef} className="flex-1 overflow-auto p-4">
         {loading && (
           <div className="flex items-center justify-center gap-2 py-12" style={{ color: "var(--text-muted)" }}>
             <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
@@ -587,6 +589,64 @@ function SessionSnippetCard({ snippet: s, view, isSelected, onSelect, onSave, on
           style={{ background: copied ? "rgba(34,197,94,0.15)" : "var(--accent)", color: copied ? "var(--accent)" : "#000" }}>
           {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? "Copied!" : "Copy"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ── 仮想化リスト（全セッションタブ・リストビュー用）────────────────────────────
+interface VirtualizedSnippetListProps {
+  snippets: CodeSnippetWithSession[];
+  parentRef: React.RefObject<HTMLDivElement>;
+  selectedId: string | null;
+  onSelect: (index: number) => void;
+  onSave: (s: CodeSnippetWithSession) => void;
+  onPreview: (s: CodeSnippetWithSession) => void;
+}
+
+function VirtualizedSnippetList({
+  snippets,
+  parentRef,
+  selectedId,
+  onSelect,
+  onSave,
+  onPreview,
+}: VirtualizedSnippetListProps) {
+  const virtualizer = useVirtualizer({
+    count: snippets.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 52,   // リストビュー 1行の高さ概算
+    overscan: 8,               // 画面外上下にバッファ
+  });
+
+  return (
+    <div ref={parentRef} className="overflow-auto flex-1" style={{ minHeight: 0 }}>
+      <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}>
+        {virtualizer.getVirtualItems().map((vItem) => {
+          const s = snippets[vItem.index];
+          const i = vItem.index;
+          return (
+            <div
+              key={i}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                transform: `translateY(${vItem.start}px)`,
+              }}
+            >
+              <SessionSnippetCard
+                snippet={s}
+                view="list"
+                isSelected={selectedId === `all-${i}`}
+                onSelect={() => onSelect(i)}
+                onSave={() => onSave(s)}
+                onPreview={() => onPreview(s)}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
