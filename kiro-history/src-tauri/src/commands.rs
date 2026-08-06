@@ -1039,3 +1039,9 @@ pub fn reload_model_prices(state: State<'_, Mutex<AppState>>) -> Result<String, 
     *prices = config;
     Ok(msg)
 }
+
+#[tauri::command]
+pub fn get_snippet_tags(state: State<'_, Mutex<AppState>>) -> Result<Vec<(String, i64)>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::get_snippet_tags(&s.index_conn).map_err(|e| e.to_string())
+}

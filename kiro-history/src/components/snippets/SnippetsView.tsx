@@ -3,6 +3,7 @@ import { Search, LayoutGrid, List, Star, Plus, BarChart2, X, Copy, Check } from 
 import { api } from "../../api";
 import { useToast } from "../ui/Toast";
 import { SnippetCard, SaveSnippetModal, langColor, LANG_COLORS } from "./SnippetCard";
+import { SnippetDetailPanel } from "./SnippetDetailPanel";
 import type { SavedSnippet, CodeSnippetWithSession, SnippetStats } from "../../types";
 
 type Tab = "saved" | "all";
@@ -37,6 +38,8 @@ export function SnippetsView() {
 
   // Save modal state
   const [saveModal, setSaveModal] = useState<CodeSnippetWithSession | null>(null);
+  const [detailSnippet, setDetailSnippet] = useState<import("../../types").SavedSnippet | CodeSnippetWithSession | null>(null);
+  const [allSnippetTags, setAllSnippetTags] = useState<Array<[string, number]>>([]);
   const [previewModal, setPreviewModal] = useState<CodeSnippetWithSession | null>(null);
 
   // Escape キーでプレビューモーダルを閉じる
@@ -138,6 +141,39 @@ export function SnippetsView() {
                 </span>
               ))}
             </div>
+            {/* most_used / recently_added */}
+            {(stats.most_used.length > 0 || stats.recently_added.length > 0) && (
+              <div className="flex gap-6 mt-2 w-full">
+                {stats.most_used.length > 0 && (
+                  <div className="flex-1">
+                    <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>よく使うスニペット</p>
+                    {stats.most_used.slice(0, 5).map((s) => (
+                      <button key={s.id} onClick={() => setDetailSnippet(s)}
+                        className="flex items-center gap-2 text-xs w-full text-left px-1 py-0.5 rounded"
+                        style={{ color: "var(--text-secondary)" }}>
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: langColor(s.language) }} />
+                        <span className="truncate flex-1">{s.title}</span>
+                        <span style={{ color: "var(--text-muted)" }}>{s.use_count}回</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {stats.recently_added.length > 0 && (
+                  <div className="flex-1">
+                    <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>最近追加</p>
+                    {stats.recently_added.slice(0, 5).map((s) => (
+                      <button key={s.id} onClick={() => setDetailSnippet(s)}
+                        className="flex items-center gap-2 text-xs w-full text-left px-1 py-0.5 rounded"
+                        style={{ color: "var(--text-secondary)" }}>
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: langColor(s.language) }} />
+                        <span className="truncate flex-1">{s.title}</span>
+                        <span style={{ color: "var(--text-muted)" }}>{new Date(s.created_at).toLocaleDateString("ja-JP")}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -253,103 +289,15 @@ export function SnippetsView() {
                 {allSnippets.map((s, i) => (
                   <SessionSnippetCard key={i} snippet={s} view={view}
                     isSelected={selectedId === `all-${i}`}
-                    onSelect={() => setSelectedId(selectedId === `all-${i}` ? null : `all-${i}`)}
+                    onSelect={() => { setSelectedId(selectedId === `all-${i}` ? null : `all-${i}`); }}
                     onSave={() => setSaveModal(s)}
-                    onPreview={() => setPreviewModal(s)} />
+                    onPreview={() => setDetailSnippet(s)} />
                 ))}
               </div>
             )}
           </>
         )}
       </div>
-
-      {/* Code Preview Modal */}
-      {previewModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.6)" }}
-          onClick={() => setPreviewModal(null)}
-        >
-          <div
-            className="rounded-xl shadow-2xl flex flex-col"
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              width: "min(760px, 92vw)",
-              maxHeight: "80vh",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center gap-3 px-5 py-3.5 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
-              <span
-                className="text-xs font-mono font-semibold px-2 py-1 rounded"
-                style={{ background: `${langColor(previewModal.language)}18`, color: langColor(previewModal.language) }}
-              >
-                {previewModal.language}
-              </span>
-              <div className="flex flex-col flex-1 min-w-0">
-                <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
-                  {inferSnippetTitle(previewModal.language, previewModal.code)}
-                </span>
-                <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
-                  {previewModal.session_title}
-                </span>
-              </div>
-              <button
-                onClick={() => setPreviewModal(null)}
-                className="p-1.5 rounded cursor-pointer flex-shrink-0"
-                style={{ color: "var(--text-muted)" }}
-                title="閉じる (Esc)"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Code */}
-            <div className="flex-1 overflow-auto" style={{ minHeight: 0 }}>
-              <pre
-                className="px-5 py-4 text-xs leading-relaxed"
-                style={{
-                  color: "var(--text-primary)",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  margin: 0,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                }}
-              >
-                {previewModal.code}
-              </pre>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between px-5 py-3 flex-shrink-0" style={{ borderTop: "1px solid var(--border)" }}>
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                {previewModal.code.split("\n").length} 行 · {previewModal.code.length} 文字
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={async () => {
-                    await api.copyToClipboard(previewModal.code);
-                    toast.success("コピーしました");
-                  }}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded cursor-pointer"
-                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
-                >
-                  <Copy size={13} /> コピー
-                </button>
-                <button
-                  onClick={() => { setSaveModal(previewModal); setPreviewModal(null); }}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded cursor-pointer font-medium"
-                  style={{ background: "var(--accent)", color: "#000" }}
-                >
-                  保存
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Save Modal */}
       {saveModal && (

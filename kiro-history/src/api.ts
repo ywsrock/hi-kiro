@@ -172,6 +172,8 @@ export const api = {
     cursor_session_id?: string;
   }) => invoke<import("./types").SessionSummary[]>("search_sessions_cursor", { params }),
 
+  getSnippetTags: () => invoke<Array<[string, number]>>("get_snippet_tags"),
+
   // ── プリフェッチ ──────────────────────────────────────────────────────────────
   prefetchSession: (sessionId: string) =>
     invoke<void>("prefetch_session", { sessionId }),

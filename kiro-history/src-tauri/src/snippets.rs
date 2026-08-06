@@ -486,3 +486,18 @@ pub fn get_snippet_stats(conn: &Connection) -> Result<SnippetStats> {
         recently_added,
     })
 }
+
+/// 保存済みスニペットのタグ一覧を頻度順で返す（オートコンプリート用）
+pub fn get_snippet_tags(conn: &Connection) -> anyhow::Result<Vec<(String, i64)>> {
+    let mut stmt = conn.prepare(
+        r#"SELECT value, COUNT(*) as cnt
+           FROM saved_snippets, json_each(saved_snippets.tags)
+           GROUP BY value
+           ORDER BY cnt DESC, value ASC
+           LIMIT 100"#,
+    )?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
+        .collect::<Vec<_>>();
+    Ok(rows.into_iter().flatten().collect())
+}
