@@ -6,8 +6,9 @@ import { python } from "@codemirror/lang-python";
 import { rust } from "@codemirror/lang-rust";
 import { sql } from "@codemirror/lang-sql";
 import { json } from "@codemirror/lang-json";
-import { X, Copy, Check, Save, Edit, History, ExternalLink, Star } from "lucide-react";
+import { X, Copy, Check, Save, Edit, History, ExternalLink, Star, RotateCcw } from "lucide-react";
 import { api } from "../../api";
+import type { SnippetVersion } from "../../api";
 import type { SavedSnippet, CodeSnippetWithSession } from "../../types";
 import { useToast } from "../ui/Toast";
 import { langColor } from "./SnippetCard";
@@ -46,6 +47,8 @@ export function SnippetDetailPanel({ snippet, onClose, onSave, onSaveNew, onOpen
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [similar, setSimilar] = useState<Array<{ snippet: SavedSnippet; similarity: number }>>([]);
+  const [versions, setVersions] = useState<SnippetVersion[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const color = langColor(snippet.language);
@@ -69,6 +72,9 @@ export function SnippetDetailPanel({ snippet, onClose, onSave, onSaveNew, onOpen
     if (isSaved(snippet)) {
       api.findSimilarSnippets(snippet.code, snippet.language, snippet.id)
         .then(setSimilar)
+        .catch(() => {});
+      api.listSnippetVersions(snippet.id)
+        .then(setVersions)
         .catch(() => {});
     }
   }, [snippet]);
@@ -135,6 +141,16 @@ export function SnippetDetailPanel({ snippet, onClose, onSave, onSaveNew, onOpen
               title="編集 (E)"
             >
               <Edit size={14} />
+            </button>
+          )}
+          {isSaved(snippet) && versions.length > 0 && (
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="p-1.5 rounded cursor-pointer"
+              style={{ color: showHistory ? "var(--accent)" : "var(--text-muted)", background: showHistory ? "rgba(34,197,94,0.1)" : "transparent" }}
+              title={`バージョン履歴 (${versions.length}件)`}
+            >
+              <History size={14} />
             </button>
           )}
           {sessionId && (

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, LayoutGrid, List, Star, Plus, BarChart2, X, Copy, Check } from "lucide-react";
+import { Search, LayoutGrid, List, Star, Plus, BarChart2, X, Copy, Check, Download, Upload } from "lucide-react";
 import { api } from "../../api";
+import type { ExportItem } from "../../api";
 import { useToast } from "../ui/Toast";
 import { SnippetCard, SaveSnippetModal, langColor, LANG_COLORS } from "./SnippetCard";
 import { SnippetDetailPanel } from "./SnippetDetailPanel";
@@ -40,6 +41,45 @@ export function SnippetsView() {
   const [saveModal, setSaveModal] = useState<CodeSnippetWithSession | null>(null);
   const [detailSnippet, setDetailSnippet] = useState<import("../../types").SavedSnippet | CodeSnippetWithSession | null>(null);
   const [allSnippetTags, setAllSnippetTags] = useState<Array<[string, number]>>([]);
+
+  // ── エクスポート ──
+  const handleExport = async () => {
+    try {
+      const items: ExportItem[] = await api.exportSnippets();
+      const json = JSON.stringify(items, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `hi-kiro-snippets-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`${items.length}件エクスポートしました`);
+    } catch (e) {
+      toast.error("エクスポート失敗: " + String(e));
+    }
+  };
+
+  // ── インポート ──
+  const handleImport = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const items: ExportItem[] = JSON.parse(text);
+        const [imported, skipped] = await api.importSnippets(items, false);
+        toast.success(`${imported}件インポート、${skipped}件スキップ`);
+        loadSaved();
+      } catch (e) {
+        toast.error("インポート失敗 (JSON形式を確認してください)");
+      }
+    };
+    input.click();
+  };
   const [previewModal, setPreviewModal] = useState<CodeSnippetWithSession | null>(null);
 
   // Escape キーでプレビューモーダルを閉じる

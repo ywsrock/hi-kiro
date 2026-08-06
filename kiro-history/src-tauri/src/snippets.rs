@@ -501,3 +501,227 @@ pub fn get_snippet_tags(conn: &Connection) -> anyhow::Result<Vec<(String, i64)>>
         .collect::<Vec<_>>();
     Ok(rows.into_iter().flatten().collect())
 }
+
+// ── バージョン履歴 ────────────────────────────────────────────────────────────
+
+/// 編集前にスナップショットを保存する（最大50件保持）
+pub fn snapshot_version(conn: &Connection, snippet_id: &str, note: &str) -> Result<()> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    let row: Option<(String, String, String)> = conn
+        .query_row(
+            "SELECT title, code, description FROM saved_snippets WHERE id = ?1",
+            params![snippet_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .ok();
+
+    if let Some((title, code, desc)) = row {
+        let vid = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO snippet_versions (id, snippet_id, title, code, description, saved_at, note)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![vid, snippet_id, title, code, desc, now, note],
+        )?;
+        // 50件超を削除
+        conn.execute(
+            "DELETE FROM snippet_versions WHERE snippet_id = ?1 AND id NOT IN (
+                 SELECT id FROM snippet_versions WHERE snippet_id = ?1
+                 ORDER BY saved_at DESC LIMIT 50
+             )",
+            params![snippet_id],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn list_snippet_versions(
+    conn: &Connection,
+    snippet_id: &str,
+) -> Result<Vec<crate::types::SnippetVersion>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, snippet_id, title, code, description, saved_at, note
+         FROM snippet_versions WHERE snippet_id = ?1
+         ORDER BY saved_at DESC LIMIT 50",
+    )?;
+    let rows = stmt.query_map(params![snippet_id], |r| {
+        Ok(crate::types::SnippetVersion {
+            id: r.get(0)?,
+            snippet_id: r.get(1)?,
+            title: r.get(2)?,
+            code: r.get(3)?,
+            description: r.get(4)?,
+            saved_at: r.get(5)?,
+            note: r.get(6)?,
+        })
+    })?;
+    Ok(rows.into_iter().flatten().collect())
+}
+
+pub fn restore_snippet_version(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<crate::types::SavedSnippet> {
+    let ver: crate::types::SnippetVersion = conn.query_row(
+        "SELECT id, snippet_id, title, code, description, saved_at, note
+         FROM snippet_versions WHERE id = ?1",
+        params![version_id],
+        |r| {
+            Ok(crate::types::SnippetVersion {
+                id: r.get(0)?,
+                snippet_id: r.get(1)?,
+                title: r.get(2)?,
+                code: r.get(3)?,
+                description: r.get(4)?,
+                saved_at: r.get(5)?,
+                note: r.get(6)?,
+            })
+        },
+    )?;
+
+    // 現在状態を先にスナップショット
+    let _ = snapshot_version(conn, &ver.snippet_id, "復元前バックアップ");
+
+    // 既存のタグ・言語を取得
+    let (lang, tags_json): (String, String) = conn.query_row(
+        "SELECT language, tags FROM saved_snippets WHERE id = ?1",
+        params![ver.snippet_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+
+    update_snippet(
+        conn,
+        &ver.snippet_id,
+        &ver.title,
+        &ver.description,
+        &lang,
+        &ver.code,
+        &tags,
+    )?;
+
+    conn.query_row(
+        &format!("{SELECT} WHERE id = ?1"),
+        params![ver.snippet_id],
+        row_to_snippet,
+    )
+    .map_err(Into::into)
+}
+
+// ── Import / Export ───────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ExportItem {
+    pub title: String,
+    pub description: String,
+    pub language: String,
+    pub code: String,
+    pub tags: Vec<String>,
+    pub starred: bool,
+    pub use_count: i64,
+    pub created_at: i64,
+}
+
+pub fn export_snippets(conn: &Connection, ids: Option<&[String]>) -> Result<Vec<ExportItem>> {
+    let snippets: Vec<SavedSnippet> = if let Some(ids) = ids {
+        ids.iter()
+            .filter_map(|id| {
+                conn.query_row(
+                    &format!("{SELECT} WHERE id = ?1"),
+                    params![id],
+                    row_to_snippet,
+                )
+                .ok()
+            })
+            .collect()
+    } else {
+        let mut stmt = conn.prepare(&format!("{SELECT} ORDER BY created_at ASC"))?;
+        let rows: Vec<SavedSnippet> = stmt.query_map([], row_to_snippet)?.flatten().collect();
+        rows
+    };
+
+    Ok(snippets
+        .into_iter()
+        .map(|s| ExportItem {
+            title: s.title,
+            description: s.description,
+            language: s.language,
+            code: s.code,
+            tags: s.tags,
+            starred: s.starred,
+            use_count: s.use_count,
+            created_at: s.created_at,
+        })
+        .collect())
+}
+
+/// JSON アイテムを一括インポート。戻り値: (imported件数, skipped件数)
+pub fn import_snippets(
+    conn: &Connection,
+    items: &[ExportItem],
+    overwrite_existing: bool,
+) -> Result<(usize, usize)> {
+    let mut imported = 0usize;
+    let mut skipped = 0usize;
+
+    for item in items {
+        let existing_id: Option<String> = conn
+            .query_row(
+                "SELECT id FROM saved_snippets WHERE title = ?1 AND code = ?2",
+                params![item.title, item.code],
+                |r| r.get(0),
+            )
+            .ok();
+
+        if let Some(id) = existing_id {
+            if overwrite_existing {
+                update_snippet(
+                    conn,
+                    &id,
+                    &item.title,
+                    &item.description,
+                    &item.language,
+                    &item.code,
+                    &item.tags,
+                )?;
+                imported += 1;
+            } else {
+                skipped += 1;
+            }
+        } else {
+            let tags_json = serde_json::to_string(&item.tags).unwrap_or_else(|_| "[]".into());
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            let id = Uuid::new_v4().to_string();
+            conn.execute(
+                "INSERT INTO saved_snippets
+                 (id, title, description, language, code, tags, starred, source_session_id,
+                  source_cwd, created_at, updated_at, use_count, last_used_at)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,'',?8,?8,?9,0)",
+                params![
+                    id,
+                    item.title,
+                    item.description,
+                    item.language,
+                    item.code,
+                    tags_json,
+                    item.starred as i32,
+                    now,
+                    item.use_count
+                ],
+            )?;
+            conn.execute(
+                "INSERT INTO saved_snippets_fts (id, title, description, code, tags)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![id, item.title, item.description, item.code, tags_json],
+            )?;
+            imported += 1;
+        }
+    }
+    Ok((imported, skipped))
+}

@@ -201,6 +201,11 @@ pub fn run() {
             commands::reload_model_prices,
             commands::get_model_prices,
             commands::get_snippet_tags,
+            commands::list_snippet_versions,
+            commands::restore_snippet_version,
+            commands::snapshot_snippet_version,
+            commands::export_snippets,
+            commands::import_snippets,
             commands::search_sessions_cursor,
         ])
         .run(tauri::generate_context!())

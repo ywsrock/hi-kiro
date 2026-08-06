@@ -1045,3 +1045,54 @@ pub fn get_snippet_tags(state: State<'_, Mutex<AppState>>) -> Result<Vec<(String
     let s = state.lock().map_err(|e| e.to_string())?;
     crate::snippets::get_snippet_tags(&s.index_conn).map_err(|e| e.to_string())
 }
+
+// ── バージョン履歴 ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn list_snippet_versions(
+    state: State<'_, Mutex<AppState>>,
+    snippet_id: String,
+) -> Result<Vec<crate::types::SnippetVersion>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::list_snippet_versions(&s.index_conn, &snippet_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn restore_snippet_version(
+    state: State<'_, Mutex<AppState>>,
+    version_id: String,
+) -> Result<crate::types::SavedSnippet, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::restore_snippet_version(&s.index_conn, &version_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn snapshot_snippet_version(
+    state: State<'_, Mutex<AppState>>,
+    snippet_id: String,
+    note: String,
+) -> Result<(), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::snapshot_version(&s.index_conn, &snippet_id, &note).map_err(|e| e.to_string())
+}
+
+// ── インポート / エクスポート ─────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn export_snippets(
+    state: State<'_, Mutex<AppState>>,
+    ids: Option<Vec<String>>,
+) -> Result<Vec<crate::snippets::ExportItem>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::export_snippets(&s.index_conn, ids.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn import_snippets(
+    state: State<'_, Mutex<AppState>>,
+    items: Vec<crate::snippets::ExportItem>,
+    overwrite: bool,
+) -> Result<(usize, usize), String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    crate::snippets::import_snippets(&s.index_conn, &items, overwrite).map_err(|e| e.to_string())
+}

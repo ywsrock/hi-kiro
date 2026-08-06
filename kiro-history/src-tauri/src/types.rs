@@ -207,6 +207,17 @@ pub struct SavedSnippet {
     pub last_used_at: i64,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SnippetVersion {
+    pub id: String,
+    pub snippet_id: String,
+    pub title: String,
+    pub code: String,
+    pub description: String,
+    pub saved_at: i64,
+    pub note: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SaveSnippetParams {
     pub title: String,

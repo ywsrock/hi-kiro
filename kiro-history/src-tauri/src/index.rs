@@ -129,6 +129,21 @@ fn init_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_snippets_starred  ON saved_snippets(starred) WHERE starred = 1;
         CREATE INDEX IF NOT EXISTS idx_snippets_updated  ON saved_snippets(updated_at DESC);
     ")?;
+
+    // マイグレーション: snippet_versions テーブル（初回のみ）
+    conn.execute_batch(
+        r#"CREATE TABLE IF NOT EXISTS snippet_versions (
+            id          TEXT PRIMARY KEY,
+            snippet_id  TEXT NOT NULL REFERENCES saved_snippets(id) ON DELETE CASCADE,
+            title       TEXT NOT NULL DEFAULT '',
+            code        TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            saved_at    INTEGER NOT NULL,
+            note        TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_sv_snippet ON snippet_versions(snippet_id, saved_at DESC);"#,
+    )?;
+
     Ok(())
 }
 

@@ -1,5 +1,26 @@
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
+
+export interface SnippetVersion {
+  id: string;
+  snippet_id: string;
+  title: string;
+  code: string;
+  description: string;
+  saved_at: number;
+  note: string;
+}
+
+export interface ExportItem {
+  title: string;
+  description: string;
+  language: string;
+  code: string;
+  tags: string[];
+  starred: boolean;
+  use_count: number;
+  created_at: number;
+}
 import type {
   CodeSnippetWithSession,
   CreateTagParams,
@@ -173,6 +194,20 @@ export const api = {
   }) => invoke<import("./types").SessionSummary[]>("search_sessions_cursor", { params }),
 
   getSnippetTags: () => invoke<Array<[string, number]>>("get_snippet_tags"),
+
+  // ── バージョン履歴 ──────────────────────────────────────────────────────────
+  listSnippetVersions: (snippetId: string) =>
+    invoke<SnippetVersion[]>("list_snippet_versions", { snippetId }),
+  restoreSnippetVersion: (versionId: string) =>
+    invoke<SavedSnippet>("restore_snippet_version", { versionId }),
+  snapshotSnippetVersion: (snippetId: string, note: string) =>
+    invoke<void>("snapshot_snippet_version", { snippetId, note }),
+
+  // ── インポート / エクスポート ────────────────────────────────────────────────
+  exportSnippets: (ids?: string[]) =>
+    invoke<ExportItem[]>("export_snippets", { ids: ids ?? null }),
+  importSnippets: (items: ExportItem[], overwrite: boolean) =>
+    invoke<[number, number]>("import_snippets", { items, overwrite }),
 
   // ── プリフェッチ ──────────────────────────────────────────────────────────────
   prefetchSession: (sessionId: string) =>
