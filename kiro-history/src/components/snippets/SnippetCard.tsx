@@ -54,7 +54,7 @@ export function SaveSnippetModal({ language, code, sessionId, sessionTitle, cwd,
     });
     // 類似スニペットを事前チェック
     api.findSimilarSnippets(code, language).then((sims) => {
-      const high = sims.filter((s) => s.similarity >= 0.9);
+      const high = sims.filter((s) => s.similarity >= 0.8);
       setDuplicates(high);
     }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
