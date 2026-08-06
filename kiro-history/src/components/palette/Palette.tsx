@@ -155,7 +155,7 @@ export function Palette() {
           ↑↓ 移動　Enter コピー　Esc 閉じる
         </span>
         <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-          Ctrl+Shift+V
+          トレイメニューから開く
         </span>
       </div>
     </div>
