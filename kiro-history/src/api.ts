@@ -184,8 +184,8 @@ export const api = {
 
   // ── Config / WSL Path Detection ─────────────────────────────────────────────
   getConfig: () =>
-    invoke<{ sessions_dir?: string; sqlite_db_path?: string; theme?: string }>("get_config"),
-  saveConfig: (config: { sessions_dir?: string; sqlite_db_path?: string; theme?: string }) =>
+    invoke<{ sessions_dir?: string; sqlite_db_path?: string; theme?: string; palette_shortcut_key?: string; palette_shortcut_enabled?: boolean }>("get_config"),
+  saveConfig: (config: { sessions_dir?: string; sqlite_db_path?: string; theme?: string; palette_shortcut_key?: string; palette_shortcut_enabled?: boolean }) =>
     invoke<void>("save_config_cmd", { config }),
   detectWslPaths: () =>
     invoke<{ sessions_dir?: string; sqlite_db_path?: string; distro?: string }>("detect_wsl_paths"),
@@ -240,6 +240,8 @@ export const api = {
   confirmDelete: (message: string) => confirm(message, { title: "削除の確認", kind: "warning" }),
 
   // ── Quick Palette & Cleanup ─────────────────────────────────────────────────
+  updatePaletteShortcut: (enabled: boolean, key: string) =>
+    invoke<void>("update_palette_shortcut", { enabled, key }),
   quickSearchSnippets: (query: string) =>
     invoke<SavedSnippet[]>("quick_search_snippets", { query }),
   findDuplicateGroups: (threshold?: number) =>

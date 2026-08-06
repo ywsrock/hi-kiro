@@ -255,6 +255,7 @@ pub fn run() {
             commands::set_snippet_collection,
             commands::search_sessions_cursor,
             commands::quick_search_snippets,
+            commands::update_palette_shortcut,
             commands::find_duplicate_groups,
             commands::find_unused_snippets,
             commands::bulk_delete_snippets,

@@ -28,6 +28,9 @@ export function SettingsView() {
   const [modelPrices, setModelPrices] = useState<Array<{ pattern: string; input: number; output: number; ctx: number }>>([]);
   const [pricesUpdated, setPricesUpdated] = useState("");
   const [isWindows, setIsWindows] = useState(false);
+  const [paletteEnabled, setPaletteEnabled] = useState(true);
+  const [paletteKey, setPaletteKey] = useState("CommandOrControl+Shift+V");
+  const [shortcutSaving, setShortcutSaving] = useState(false);
 
   useEffect(() => {
     // OS判定
@@ -45,6 +48,8 @@ export function SettingsView() {
       .then(([cfg, paths, s]) => {
         setSessionsDir(cfg.sessions_dir ?? "");
         setSqlitePath(cfg.sqlite_db_path ?? "");
+        setPaletteEnabled(cfg.palette_shortcut_enabled ?? true);
+        setPaletteKey(cfg.palette_shortcut_key ?? "CommandOrControl+Shift+V");
         setCurrentPaths(paths);
         setStats(s);
       })

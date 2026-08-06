@@ -1022,6 +1022,12 @@ pub fn save_config_cmd(config: crate::state::AppConfig) -> Result<(), String> {
             .theme
             .or(existing.theme)
             .or(Some("system".to_string())),
+        palette_shortcut_key: config
+            .palette_shortcut_key
+            .or(existing.palette_shortcut_key),
+        palette_shortcut_enabled: config
+            .palette_shortcut_enabled
+            .or(existing.palette_shortcut_enabled),
     };
     crate::state::save_config(&merged).map_err(|e| e.to_string())
 }
@@ -1274,4 +1280,40 @@ pub fn merge_snippets(
 ) -> Result<(), String> {
     let s = state.lock().map_err(|e| e.to_string())?;
     crate::snippets::merge_snippets(&s.index_conn, &keep_id, &drop_ids).map_err(|e| e.to_string())
+}
+
+// ── Palette Shortcut Settings ─────────────────────────────────────────────────
+
+/// ショートカット設定を更新し、即時に再登録する。
+#[tauri::command]
+pub fn update_palette_shortcut(
+    enabled: bool,
+    key: String,
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    // 現在のショートカットを全て解除
+    app.global_shortcut().unregister_all().ok();
+
+    // 設定を保存
+    {
+        let mut s = state.lock().map_err(|e| e.to_string())?;
+        s.config.palette_shortcut_enabled = Some(enabled);
+        s.config.palette_shortcut_key = Some(key.clone());
+        crate::state::save_config(&s.config).map_err(|e| e.to_string())?;
+    }
+
+    // 有効なら再登録
+    if enabled {
+        let sc = key
+            .parse::<Shortcut>()
+            .map_err(|e| format!("Invalid shortcut: {e}"))?;
+        app.global_shortcut()
+            .register(sc)
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
