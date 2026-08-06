@@ -7,10 +7,11 @@ import { useToast } from "../ui/Toast";
 import { useApp } from "../../context/AppContext";
 import { ConfirmDialog } from "../ui/ModalShell";
 import { SnippetCard, SaveSnippetModal, langColor, LANG_COLORS } from "./SnippetCard";
+import { CleanupView } from "./CleanupView";
 import { SnippetDetailPanel } from "./SnippetDetailPanel";
 import type { SavedSnippet, CodeSnippetWithSession, SnippetStats } from "../../types";
 
-type Tab = "saved" | "all";
+type Tab = "saved" | "cleanup";
 type SortBy = "recent" | "used" | "starred";
 type View = "grid" | "list";
 
@@ -194,7 +195,7 @@ export function SnippetsView() {
       <div className="flex-shrink-0" style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
         {/* Tab bar */}
         <div className="flex items-center gap-0 px-4 pt-3">
-          {(["saved", "all"] as Tab[]).map((t) => (
+          {(["saved", "cleanup"] as Tab[]).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className="px-4 py-2 text-sm font-medium cursor-pointer rounded-t-lg"
               style={{
@@ -202,7 +203,7 @@ export function SnippetsView() {
                 color: tab === t ? "var(--accent)" : "var(--text-muted)",
                 borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
               }}>
-              {t === "saved" ? `保存済み${stats ? ` (${stats.total_saved})` : ""}` : "全セッション"}
+              {t === "saved" ? `保存済み${stats ? ` (${stats.total_saved})` : ""}` : "🔧 整理"}
             </button>
           ))}
           <div className="flex-1" />
@@ -392,7 +393,7 @@ export function SnippetsView() {
                 <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
                   「全セッション」タブでセッション内のコードを見つけ、<br />「保存」ボタンでコレクションに追加できます
                 </p>
-                <button onClick={() => setTab("all")}
+                <button onClick={() => setTab("cleanup")}
                   className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg cursor-pointer"
                   style={{ background: "var(--accent)", color: "#000" }}>
                   <Plus size={14} /> セッションから追加
@@ -420,36 +421,11 @@ export function SnippetsView() {
           </>
         )}
 
-        {/* All session snippets */}
-        {!loading && tab === "all" && (
-          <>
-            {allSnippets.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-16">
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>スニペットが見つかりません</p>
-              </div>
-            ) : view === "list" ? (
-              /* リストビュー: 仮想化で大量件数に対応（IPC 同時発火を抑制） */
-              <VirtualizedSnippetList
-                snippets={allSnippets}
-                parentRef={allSnippetsParentRef}
-                selectedId={selectedId}
-                onSelect={(i) => setSelectedId(selectedId === `all-${i}` ? null : `all-${i}`)}
-                onSave={(s) => setSaveModal(s)}
-                onPreview={(s) => setDetailSnippet(s)}
-              />
-            ) : (
-              /* グリッドビュー: 検索で件数が絞られる前提でそのまま（将来対応可） */
-              <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
-                {allSnippets.map((s, i) => (
-                  <SessionSnippetCard key={i} snippet={s} view="grid"
-                    isSelected={selectedId === `all-${i}`}
-                    onSelect={() => { setSelectedId(selectedId === `all-${i}` ? null : `all-${i}`); }}
-                    onSave={() => setSaveModal(s)}
-                    onPreview={() => setDetailSnippet(s)} />
-                ))}
-              </div>
-            )}
-          </>
+        {/* Cleanup View */}
+        {tab === "cleanup" && (
+          <div className="flex-1 overflow-hidden -mx-0">
+            <CleanupView />
+          </div>
         )}
       </div>
 

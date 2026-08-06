@@ -295,3 +295,14 @@ pub struct SnippetCollection {
     pub created_at: i64,
     pub snippet_count: i64, // 集計値
 }
+
+/// 重複スニペットのグループ（find_duplicate_groups の戻り値）
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DuplicateGroup {
+    /// このグループで残すべき推奨 ID（use_count 最大）
+    pub keep_id: String,
+    /// グループ内の全スニペット ID（keep_id を含む）
+    pub snippet_ids: Vec<String>,
+    /// 最も類似度が高いペアの値
+    pub similarity: f32,
+}

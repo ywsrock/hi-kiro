@@ -45,6 +45,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
@@ -147,6 +148,31 @@ pub fn run() {
                 let _ = app_handle.emit("index:done", ());
             });
 
+            // ── グローバルショートカット (Ctrl+Shift+V) ──────────────────
+            use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+            let shortcut: Shortcut = "Ctrl+Shift+V".parse().expect("invalid shortcut");
+            let app_handle2 = app.handle().clone();
+            app.handle()
+                .plugin(
+                    tauri_plugin_global_shortcut::Builder::new()
+                        .with_handler(move |_app, _sc, event| {
+                            if event.state() == ShortcutState::Pressed {
+                                if let Some(win) = app_handle2.get_webview_window("quick-palette") {
+                                    if win.is_visible().unwrap_or(false) {
+                                        let _ = win.hide();
+                                    } else {
+                                        let _ = win.center();
+                                        let _ = win.show();
+                                        let _ = win.set_focus();
+                                    }
+                                }
+                            }
+                        })
+                        .build(),
+                )
+                .ok();
+            app.global_shortcut().register(shortcut).ok();
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -211,6 +237,11 @@ pub fn run() {
             commands::delete_snippet_collection,
             commands::set_snippet_collection,
             commands::search_sessions_cursor,
+            commands::quick_search_snippets,
+            commands::find_duplicate_groups,
+            commands::find_unused_snippets,
+            commands::bulk_delete_snippets,
+            commands::merge_snippets,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

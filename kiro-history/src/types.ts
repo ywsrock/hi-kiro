@@ -220,3 +220,9 @@ export interface SnippetStats {
   most_used: SavedSnippet[];
   recently_added: SavedSnippet[];
 }
+
+export interface DuplicateGroup {
+  keep_id: string;
+  snippet_ids: string[];
+  similarity: number;
+}

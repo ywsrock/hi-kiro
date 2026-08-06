@@ -38,6 +38,7 @@ import type {
   SnippetSearchParams,
   SnippetStats,
   DiffResult,
+  DuplicateGroup,
   ExportFormat,
   FileRef,
   FilterParams,
@@ -237,4 +238,16 @@ export const api = {
 
   // ── ダイアログ ───────────────────────────────────────────────────────────────
   confirmDelete: (message: string) => confirm(message, { title: "削除の確認", kind: "warning" }),
+
+  // ── Quick Palette & Cleanup ─────────────────────────────────────────────────
+  quickSearchSnippets: (query: string) =>
+    invoke<SavedSnippet[]>("quick_search_snippets", { query }),
+  findDuplicateGroups: (threshold?: number) =>
+    invoke<DuplicateGroup[]>("find_duplicate_groups", { threshold }),
+  findUnusedSnippets: (days?: number) =>
+    invoke<SavedSnippet[]>("find_unused_snippets", { days }),
+  bulkDeleteSnippets: (ids: string[]) =>
+    invoke<number>("bulk_delete_snippets", { ids }),
+  mergeSnippets: (keepId: string, dropIds: string[]) =>
+    invoke<void>("merge_snippets", { keepId, dropIds }),
 };
