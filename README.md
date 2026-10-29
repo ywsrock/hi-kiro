@@ -1,99 +1,144 @@
+<div align="center">
+
 # hi-kiro
 
-kiro-cli のセッション履歴を横断検索できるデスクトップアプリです。
+**Find anything in your kiro-cli history, across every session, in an instant.**<br>
+A desktop app built with Tauri v2 and Rust. Everything stays on your machine, and your session files are never modified.
 
-**Tauri v2 + React + Rust** 製。全セッションの全文検索・Markdownプレビュー・統計ダッシュボードなど。
+[![CI](https://github.com/ywsrock/hi-kiro/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/ywsrock/hi-kiro/actions/workflows/test.yml)
+[![Release](https://img.shields.io/github/v/release/ywsrock/hi-kiro)](https://github.com/ywsrock/hi-kiro/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20WSL2%20%7C%20Windows%20%7C%20macOS-555)](https://github.com/ywsrock/hi-kiro/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](kiro-history/LICENSE)
 
----
+[日本語](README.ja.md)
 
-## 機能
+<!-- To add a screenshot: ![hi-kiro search view](docs/hero.png) -->
 
-- 全セッション横断 FTS5 全文検索（タイトル・cwd・全メッセージ本文）
-- Markdown レンダリングプレビュー（コードハイライト・テーブル対応）
-- ブックマーク・タグ付け・リネーム・削除
-- 統計ダッシュボード（推定コスト・生産性・AI活用度・カレンダーヒートマップ）
-- セッション再開 `kiro-cli chat --resume-id <id>`
-- エクスポート（Markdown / HTML / ZIP）
-- コードスニペット一覧・ファイル参照ビュー
-- ダーク / ライトテーマ（システム設定追従）
-- システムトレイ常駐（× ボタンで最小化、トレイから再表示）
+</div>
 
----
+## Why hi-kiro
 
-## インストール（Linux / WSL2）
+- **Find "that thing I asked about" right away.** Titles, working directories and every message body are searched with SQLite FTS5. Old and new session formats, JSONL (v3) and SQLite (v1/v2), are handled together.
+- **Found it? Pick up where you left off.** Press `Ctrl+R` in the preview to run `kiro-cli chat --resume-id <id>` and resume the session in its original working directory.
+- **Turn your history into an asset.** Save code from conversations as tagged snippets and copy them any time from a palette you can open from the tray. The dashboard shows estimated cost and how you use AI over time.
 
-### 必要環境
+## Quick start
 
-- Ubuntu 22.04 / 24.04 または互換ディストリビューション
-- WSL2（Windows 11）でも動作します
+1. Download the file for your OS from the [releases page](https://github.com/ywsrock/hi-kiro/releases/latest)
+2. Install it and launch `hi-kiro`
 
-### 手順
+That's it. On first launch, hi-kiro reads `~/.kiro/sessions/cli/` and the kiro-cli SQLite database and builds its index.
 
-**1. リリースページから `.deb` をダウンロード**
-
-[https://github.com/ywsrock/hi-kiro/releases/latest](https://github.com/ywsrock/hi-kiro/releases/latest)
-
-`hi-kiro_0.1.0_amd64.deb` をダウンロードします。
-
-**2. インストール**
+<details>
+<summary>Linux / WSL2 (.deb)</summary>
 
 ```bash
 sudo dpkg -i hi-kiro_0.1.0_amd64.deb
-```
-
-依存パッケージが不足している場合：
-
-```bash
-sudo apt install -f
-```
-
-**3. 起動**
-
-```bash
+sudo apt install -f   # if dependencies are missing
 hi-kiro
 ```
 
-起動するとターミナルは解放され、バックグラウンドで動作し続けます。  
-再度開くにはシステムトレイのアイコンをクリックしてください。
+The terminal is released right away and the app keeps running in the background. `.rpm` and `.AppImage` builds are also available.
 
-> ターミナルから手動で起動する場合（`dpkg` 以外でインストールした場合など）:
+> To start it in the background by hand, for example when it was not installed with `dpkg`:
 > ```bash
 > nohup hi-kiro > /dev/null 2>&1 &
 > ```
 
----
+</details>
 
-## アンインストール
+<details>
+<summary>Windows / macOS</summary>
+
+- **Windows**: run the `.msi` or `-setup.exe` installer. Sessions from kiro-cli inside WSL2 are detected too.
+- **macOS**: open the `.dmg` and copy the app to Applications. It is a universal binary for both Apple Silicon and Intel.
+
+</details>
+
+## Features
+
+### Search and preview
+
+Every session is searched with FTS5, and results are previewed as rendered Markdown with code highlighting and tables.
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+F` | Focus the search box |
+| `Ctrl+R` | Resume the selected session in kiro-cli |
+| `Ctrl+Y` | Copy the displayed conversation to the clipboard |
+
+On macOS, use `Cmd` instead of `Ctrl`.
+
+### Organize
+
+Bookmark, tag and rename sessions. hi-kiro is a viewer and search tool, so it deliberately has no way to delete sessions.
+
+### Snippets
+
+Save code blocks from conversations and sort them with tags and collections. Duplicate snippets can be merged, and the "スニペット検索 (パレット)" (snippet palette) item in the tray menu brings them up instantly.
+
+### Dashboard
+
+Look back on how you use kiro-cli with estimated cost, productivity, AI usage and a calendar heatmap.
+
+The model prices used for cost estimates can be overridden with `model_prices.json`, so price changes take effect without rebuilding the app.
+
+| OS | Location |
+|---|---|
+| Linux | `~/.local/share/hi-kiro/model_prices.json` |
+| Windows | `%APPDATA%\hi-kiro\model_prices.json` |
+| macOS | `~/Library/Application Support/hi-kiro/model_prices.json` |
+
+### Export
+
+Export sessions as Markdown or HTML, or bundle several sessions into a ZIP.
+
+### And more
+
+- Dark and light themes that follow your system setting
+- Lives in the system tray: closing the window with × keeps it running in the background
+
+## System tray
+
+The tray menu is in Japanese.
+
+| Action | Result |
+|---|---|
+| Click the tray icon | Show or hide the window |
+| Right-click → ウィンドウを表示 (Show window) | Bring the window to the front |
+| Right-click → スニペット検索 (パレット) (Snippet palette) | Open the snippet palette |
+| Right-click → 終了 (Quit) | Quit the app completely |
+| Window × button | Hide to the tray (keeps running) |
+
+## Your data
+
+- **Read-only**: kiro-cli session files are never modified
+- **Local only**: your history is never sent anywhere
+- **Sources**: `~/.kiro/sessions/cli/` (JSONL v3) and `~/.local/share/kiro-cli/data.sqlite3` (SQLite v1/v2)
+- **Index database**: `~/.local/share/hi-kiro/index.db` (on Linux)
+
+If you delete sessions in kiro-cli, rebuild the index from the settings view to reflect it.
+
+## Uninstall
 
 ```bash
-sudo apt remove hi-kiro
+sudo apt remove hi-kiro   # Linux (.deb)
 ```
 
----
+On Windows, remove it from Apps & features. On macOS, delete it from Applications.
 
-## システムトレイの使い方
+## Build from source
 
-| 操作 | 動作 |
-|---|---|
-| トレイアイコンをクリック | ウィンドウ 表示 / 非表示 の切り替え |
-| 右クリック → ウィンドウを表示 | ウィンドウをフォーカス表示 |
-| 右クリック → 終了 | アプリを完全終了 |
-| ウィンドウの × ボタン | トレイに格納（バックグラウンドで動作継続） |
-
----
-
-## ローカルでビルドする場合
-
-### 必要ツール
+<details>
+<summary>Required tools</summary>
 
 ```bash
 # Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Node.js (v18 以上)
-# nvm 推奨: https://github.com/nvm-sh/nvm
+# Node.js v18 or later (nvm recommended: https://github.com/nvm-sh/nvm)
 
-# Linux 必須パッケージ
+# Linux only
 sudo apt install -y \
   libwebkit2gtk-4.1-dev \
   libgtk-3-dev \
@@ -103,69 +148,37 @@ sudo apt install -y \
   squashfs-tools
 ```
 
-### ビルド手順
+</details>
 
 ```bash
 git clone https://github.com/ywsrock/hi-kiro.git
 cd hi-kiro/kiro-history
 npm install
 
-# 開発モード（ホットリロード有効）
-npm run tauri dev
-
-# リリースビルド（.deb / .rpm / .AppImage を生成）
-npm run tauri build
+npm run tauri dev     # development mode with hot reload
+npm run tauri build   # release build
 ```
 
-生成物の場所：
+Bundles are written to `src-tauri/target/release/bundle/` (`deb/`, `rpm/` and `appimage/` on Linux).
 
-```
-src-tauri/target/release/bundle/
-├── deb/    hi-kiro_0.1.0_amd64.deb
-├── rpm/    hi-kiro-0.1.0-1.x86_64.rpm
-└── appimage/ hi-kiro_0.1.0_amd64.AppImage
-```
+## Contributing
 
----
-
-## データについて
-
-- **読み取り専用** — kiro-cli のセッションファイルは変更しません
-- インデックス DB の保存場所: `~/.local/share/hi-kiro/index.db`
-- 対応セッション形式: JSONL (v3), SQLite v1/v2
-
----
-
-## ライセンス
-
-MIT
----
-
-## 開発に参加する場合 (git hooks)
-
-クローン後、以下を1回実行してください：
+Bug reports, ideas and pull requests are welcome. After cloning, install the git hooks once:
 
 ```bash
 sh scripts/install-hooks.sh
 ```
 
-これにより `git commit` のたびに以下が自動実行されます：
+These checks then run on every `git commit`:
 
-| チェック | 内容 |
+| Check | What it does |
 |---|---|
-| `cargo fmt --check` | Rustコードのフォーマット確認 |
-| `cargo clippy` | Rust lintチェック |
-| `cargo test` | Rustユニットテスト |
+| `cargo fmt --check` | Checks Rust formatting |
+| `cargo clippy` | Lints Rust code |
+| `cargo test` | Runs Rust unit tests |
 
-フォーマットエラーが出た場合は以下で自動修正できます：
+Fix formatting errors with `cd kiro-history/src-tauri && cargo fmt`. In an emergency you can skip the hooks with `git commit --no-verify`, but this is not recommended.
 
-```bash
-cd kiro-history/src-tauri && cargo fmt
-```
+## License
 
-緊急時のスキップ（非推奨）：
-
-```bash
-git commit --no-verify
-```
-
+MIT
