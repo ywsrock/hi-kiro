@@ -2,43 +2,45 @@
 
 # hi-kiro
 
-**kiro-cli の過去のセッションを、全部まとめて一瞬で探せるデスクトップアプリ。**<br>
-Tauri v2 + Rust 製。データはローカルだけで完結し、元のセッションファイルは書き換えません。
+**Find anything in your kiro-cli history, across every session, in an instant.**<br>
+A desktop app built with Tauri v2 and Rust. Everything stays on your machine, and your session files are never modified.
 
 [![CI](https://github.com/ywsrock/hi-kiro/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/ywsrock/hi-kiro/actions/workflows/test.yml)
 [![Release](https://img.shields.io/github/v/release/ywsrock/hi-kiro)](https://github.com/ywsrock/hi-kiro/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20WSL2%20%7C%20Windows%20%7C%20macOS-555)](https://github.com/ywsrock/hi-kiro/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](kiro-history/LICENSE)
 
-<!-- スクリーンショットを追加する場合: ![hi-kiro の検索画面](docs/hero.png) -->
+[日本語](README.ja.md)
+
+<!-- To add a screenshot: ![hi-kiro search view](docs/hero.png) -->
 
 </div>
 
-## hi-kiro を選ぶ理由
+## Why hi-kiro
 
-- **「あのとき聞いたやつ」がすぐ見つかる。** タイトル・作業ディレクトリ・全メッセージ本文を SQLite FTS5 で横断検索します。JSONL (v3) と SQLite (v1/v2) の新旧セッション形式をまとめて扱えます。
-- **見つけたら、そのまま続きから。** プレビューから `Ctrl+R` で `kiro-cli chat --resume-id <id>` を実行し、当時の作業ディレクトリでセッションを再開できます。
-- **履歴が資産になる。** 会話中のコードをスニペットとして保存・タグ付けし、トレイから呼び出せるパレットでいつでもコピーできます。推定コストや活用度もダッシュボードで振り返れます。
+- **Find "that thing I asked about" right away.** Titles, working directories and every message body are searched with SQLite FTS5. Old and new session formats, JSONL (v3) and SQLite (v1/v2), are handled together.
+- **Found it? Pick up where you left off.** Press `Ctrl+R` in the preview to run `kiro-cli chat --resume-id <id>` and resume the session in its original working directory.
+- **Turn your history into an asset.** Save code from conversations as tagged snippets and copy them any time from a palette you can open from the tray. The dashboard shows estimated cost and how you use AI over time.
 
-## クイックスタート
+## Quick start
 
-1. [リリースページ](https://github.com/ywsrock/hi-kiro/releases/latest) から自分の OS 向けのファイルをダウンロード
-2. インストールして `hi-kiro` を起動
+1. Download the file for your OS from the [releases page](https://github.com/ywsrock/hi-kiro/releases/latest)
+2. Install it and launch `hi-kiro`
 
-これだけです。初回起動時に `~/.kiro/sessions/cli/` と kiro-cli の SQLite DB を読み込んでインデックスを作成します。
+That's it. On first launch, hi-kiro reads `~/.kiro/sessions/cli/` and the kiro-cli SQLite database and builds its index.
 
 <details>
-<summary>Linux / WSL2（.deb）</summary>
+<summary>Linux / WSL2 (.deb)</summary>
 
 ```bash
 sudo dpkg -i hi-kiro_0.1.0_amd64.deb
-sudo apt install -f   # 依存パッケージが不足している場合
+sudo apt install -f   # if dependencies are missing
 hi-kiro
 ```
 
-起動するとターミナルは解放され、バックグラウンドで動作し続けます。`.rpm` と `.AppImage` も用意しています。
+The terminal is released right away and the app keeps running in the background. `.rpm` and `.AppImage` builds are also available.
 
-> `dpkg` 以外でインストールした場合など、手動でバックグラウンド起動するとき：
+> To start it in the background by hand, for example when it was not installed with `dpkg`:
 > ```bash
 > nohup hi-kiro > /dev/null 2>&1 &
 > ```
@@ -48,93 +50,95 @@ hi-kiro
 <details>
 <summary>Windows / macOS</summary>
 
-- **Windows**: `.msi` または `-setup.exe` を実行します。WSL2 上の kiro-cli のセッションも検出します。
-- **macOS**: `.dmg` を開いてアプリケーションフォルダへコピーします（Apple Silicon / Intel 両対応のユニバーサルバイナリ）。
+- **Windows**: run the `.msi` or `-setup.exe` installer. Sessions from kiro-cli inside WSL2 are detected too.
+- **macOS**: open the `.dmg` and copy the app to Applications. It is a universal binary for both Apple Silicon and Intel.
 
 </details>
 
-## 主な機能
+## Features
 
-### 横断検索とプレビュー
+### Search and preview
 
-全セッションを FTS5 で全文検索し、結果を Markdown としてプレビューします。コードハイライトやテーブルにも対応しています。
+Every session is searched with FTS5, and results are previewed as rendered Markdown with code highlighting and tables.
 
-| ショートカット | 動作 |
+| Shortcut | Action |
 |---|---|
-| `Ctrl+F` | 検索ボックスにフォーカス |
-| `Ctrl+R` | 選択中のセッションを kiro-cli で再開 |
-| `Ctrl+Y` | 表示中の会話をクリップボードにコピー |
+| `Ctrl+F` | Focus the search box |
+| `Ctrl+R` | Resume the selected session in kiro-cli |
+| `Ctrl+Y` | Copy the displayed conversation to the clipboard |
 
-macOS では `Ctrl` の代わりに `Cmd` を使います。
+On macOS, use `Cmd` instead of `Ctrl`.
 
-### 整理する
+### Organize
 
-ブックマーク、タグ付け、リネームでセッションを整理できます。hi-kiro は閲覧・検索用のツールなので、セッションの削除機能はあえて持たせていません。
+Bookmark, tag and rename sessions. hi-kiro is a viewer and search tool, so it deliberately has no way to delete sessions.
 
-### スニペット
+### Snippets
 
-会話中のコードブロックを保存し、タグやコレクションで分類できます。重複したスニペットの統合や、トレイメニューの「スニペット検索 (パレット)」からの素早い呼び出しにも対応しています。
+Save code blocks from conversations and sort them with tags and collections. Duplicate snippets can be merged, and the "スニペット検索 (パレット)" (snippet palette) item in the tray menu brings them up instantly.
 
-### ダッシュボード
+### Dashboard
 
-推定コスト・生産性・AI 活用度・カレンダーヒートマップで、kiro-cli の使い方を振り返れます。
+Look back on how you use kiro-cli with estimated cost, productivity, AI usage and a calendar heatmap.
 
-コストの計算に使うモデル単価は `model_prices.json` で上書きでき、価格改定があってもアプリを再ビルドせずに反映できます。
+The model prices used for cost estimates can be overridden with `model_prices.json`, so price changes take effect without rebuilding the app.
 
-| OS | 場所 |
+| OS | Location |
 |---|---|
 | Linux | `~/.local/share/hi-kiro/model_prices.json` |
 | Windows | `%APPDATA%\hi-kiro\model_prices.json` |
 | macOS | `~/Library/Application Support/hi-kiro/model_prices.json` |
 
-### エクスポート
+### Export
 
-セッションを Markdown・HTML で書き出せます。複数のセッションをまとめて ZIP にすることもできます。
+Export sessions as Markdown or HTML, or bundle several sessions into a ZIP.
 
-### その他
+### And more
 
-- ダーク / ライトテーマ（システム設定に追従）
-- システムトレイ常駐（× ボタンで閉じてもバックグラウンドで動作を継続）
+- Dark and light themes that follow your system setting
+- Lives in the system tray: closing the window with × keeps it running in the background
 
-## システムトレイ
+## System tray
 
-| 操作 | 動作 |
+The tray menu is in Japanese.
+
+| Action | Result |
 |---|---|
-| トレイアイコンをクリック | ウィンドウの表示 / 非表示を切り替え |
-| 右クリック → ウィンドウを表示 | ウィンドウを前面に表示 |
-| 右クリック → スニペット検索 (パレット) | スニペットパレットを開く |
-| 右クリック → 終了 | アプリを完全に終了 |
-| ウィンドウの × ボタン | トレイに格納（動作は継続） |
+| Click the tray icon | Show or hide the window |
+| Right-click → ウィンドウを表示 (Show window) | Bring the window to the front |
+| Right-click → スニペット検索 (パレット) (Snippet palette) | Open the snippet palette |
+| Right-click → 終了 (Quit) | Quit the app completely |
+| Window × button | Hide to the tray (keeps running) |
 
-## データについて
+## Your data
 
-- **読み取り専用**: kiro-cli のセッションファイルは変更しません
-- **ローカル完結**: 履歴を外部に送信することはありません
-- **読み込み元**: `~/.kiro/sessions/cli/`（JSONL v3）と `~/.local/share/kiro-cli/data.sqlite3`（SQLite v1/v2）
-- **インデックス DB**: `~/.local/share/hi-kiro/index.db`（Linux の場合）
+- **Read-only**: kiro-cli session files are never modified
+- **Local only**: your history is never sent anywhere
+- **Sources**: `~/.kiro/sessions/cli/` (JSONL v3) and `~/.local/share/kiro-cli/data.sqlite3` (SQLite v1/v2)
+- **Index database**: `~/.local/share/hi-kiro/index.db` (on Linux)
 
-kiro-cli 側でセッションを削除した場合は、設定画面からインデックスを再構築すると反映されます。
+If you delete sessions in kiro-cli, rebuild the index from the settings view to reflect it.
 
-## アンインストール
+## Uninstall
 
 ```bash
 sudo apt remove hi-kiro   # Linux (.deb)
 ```
 
-Windows はアプリと機能から、macOS はアプリケーションフォルダから削除してください。
+On Windows, remove it from Apps & features. On macOS, delete it from Applications.
 
-## ソースからビルドする
+## Build from source
 
 <details>
-<summary>必要なツール</summary>
+<summary>Required tools</summary>
 
 ```bash
 # Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Node.js v18 以上（nvm 推奨: https://github.com/nvm-sh/nvm）
+# Node.js v18 or later (nvm recommended: https://github.com/nvm-sh/nvm)
 
-# Linux のみ必要なパッケージ
+# Linux only
 sudo apt install -y \
   libwebkit2gtk-4.1-dev \
   libgtk-3-dev \
@@ -151,30 +155,30 @@ git clone https://github.com/ywsrock/hi-kiro.git
 cd hi-kiro/kiro-history
 npm install
 
-npm run tauri dev     # 開発モード（ホットリロード）
-npm run tauri build   # リリースビルド
+npm run tauri dev     # development mode with hot reload
+npm run tauri build   # release build
 ```
 
-生成物は `src-tauri/target/release/bundle/` に出力されます（Linux なら `deb/`・`rpm/`・`appimage/`）。
+Bundles are written to `src-tauri/target/release/bundle/` (`deb/`, `rpm/` and `appimage/` on Linux).
 
-## 開発に参加する
+## Contributing
 
-バグ報告、アイデア、プルリクエストを歓迎します。クローン後に一度だけ git hooks をインストールしてください。
+Bug reports, ideas and pull requests are welcome. After cloning, install the git hooks once:
 
 ```bash
 sh scripts/install-hooks.sh
 ```
 
-`git commit` のたびに次のチェックが自動で走ります。
+These checks then run on every `git commit`:
 
-| チェック | 内容 |
+| Check | What it does |
 |---|---|
-| `cargo fmt --check` | Rust コードのフォーマット確認 |
-| `cargo clippy` | Rust の lint |
-| `cargo test` | Rust のユニットテスト |
+| `cargo fmt --check` | Checks Rust formatting |
+| `cargo clippy` | Lints Rust code |
+| `cargo test` | Runs Rust unit tests |
 
-フォーマットエラーは `cd kiro-history/src-tauri && cargo fmt` で自動修正できます。緊急時は `git commit --no-verify` でスキップできますが、推奨しません。
+Fix formatting errors with `cd kiro-history/src-tauri && cargo fmt`. In an emergency you can skip the hooks with `git commit --no-verify`, but this is not recommended.
 
-## ライセンス
+## License
 
 MIT
